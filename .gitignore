@@ -1,7 +1,5 @@
-__pycache__/
-.venv/
-tmp/
-build/
-output/
-*.local.xlsx
+.Rhistory
+.RData
+.Rproj.user/
 ~$*.xlsx
+*.local.xlsx
