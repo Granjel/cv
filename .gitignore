@@ -1,0 +1,7 @@
+__pycache__/
+.venv/
+tmp/
+build/
+output/
+*.local.xlsx
+~$*.xlsx
