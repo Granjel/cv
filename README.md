@@ -7,7 +7,7 @@ Shared CV data and assets, with the AEI CVA workflow in `cva/`.
 - `data/datos-cv.xlsx`: the single source of CV data, including both languages and all auxiliary sheets.
 - `cva/cva.R`: reads and validates Excel, prepares the content and builds the PDFs.
 - `cva/cva.typ`: document layout.
-- `assets/`: the two SVG header logos.
+- `assets/`: the original SVG logos and a 606 × 192 px PNG ministry logo used in the header at 44.1 mm (about 350 dpi). The AEI logo remains SVG. The PNG was rasterised through Typst and R; keep the original ministry SVG as its source.
 - `cva/pdf/`: generated English and Spanish CVAs, included in version control.
 
 ## Requirements

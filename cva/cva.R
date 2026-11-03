@@ -1495,7 +1495,7 @@ generar_cva <- function(
   on.exit(unlink(temporary, recursive = TRUE), add = TRUE)
   # Keep all Typst inputs inside its temporary root; retain only the finished PDFs.
   dir.create(file.path(temporary, "assets"))
-  logos <- file.path(root, "assets", c("logo-AEI.svg", "logo-MCIU.svg"))
+  logos <- file.path(root, "assets", c("logo-AEI.svg", "logo-MCIU.png"))
   if (
     !all(file.exists(c(file.path(root, "cva", "cva.typ"), logos))) ||
       !file.copy(file.path(root, "cva", "cva.typ"), temporary) ||

@@ -1,5 +1,5 @@
 // CVA layout adapted from Carlos Perez Carmona's JdC CVA, supplied 2 November 2026.
-// Vector header logos were supplied by the applicant; placement follows the AEI 2026 forms.
+// Header artwork was supplied by the applicant; the ministry logo uses a PNG rasterisation.
 // The applicant's concise labels and content are retained.
 // Workbook strings remain literal data and are never evaluated as Typst code.
 #let cv = json(sys.inputs.at("data"))
@@ -18,7 +18,7 @@
   foreground: context {
     let page-number = counter(page).get().first()
     if page-number == 1 or not es {
-      place(top + left, dx: 25mm, dy: 2mm, image("/assets/logo-MCIU.svg", width: 44.1mm))
+      place(top + left, dx: 25mm, dy: 2mm, image("/assets/logo-MCIU.png", width: 44.1mm))
     }
     place(top + right, dx: -25mm, dy: 2mm, image("/assets/logo-AEI.svg", height: 14mm))
   },
