@@ -1,4 +1,4 @@
-# Shared Excel data -> validated JSON -> Typst -> CVA PDFs.
+# shared Excel data -> validated JSON -> Typst -> CVA PDFs
 cva_root <- local({
   source_files <- Filter(
     function(value) is.character(value) && length(value) == 1L,
@@ -33,7 +33,9 @@ cva_root <- local({
   }
   normalizePath(candidates[valid][[1]], winslash = "/")
 })
-# Use the normal user library, including when Rscript starts with system libraries only.
+
+# use the normal user library
+# including when Rscript starts with system libraries only
 if (.Platform$OS.type == "windows") {
   r_minor <- strsplit(R.version$minor, ".", fixed = TRUE)[[1]][[1]]
   user_library <- file.path(
@@ -53,7 +55,8 @@ if (.Platform$OS.type == "windows") {
   }
 }
 
-# Required workbook columns; optional columns and auxiliary sheets remain in Excel.
+# required workbook columns
+# optional columns and auxiliary sheets remain in Excel
 cva_schema <- list(
   Perfil = list(
     headers = c(
@@ -215,7 +218,7 @@ cva_text <- function(x) {
     return(format(x, "%Y-%m-%d", tz = "UTC"))
   }
   value <- trimws(as.character(x[[1]]))
-  # ISO date cells produced by some XLSX writers are returned as text by readxl.
+  # ISO date cells produced by some XLSX writers are returned as text by readxl
   if (grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}T00:00:00(\\.0+)?Z$", value)) {
     return(substr(value, 1, 10))
   }
@@ -622,7 +625,8 @@ cva_citation_segments <- function(
   keep_together = integer(),
   inline_code = ""
 ) {
-  # Treat titles as literal data; format initials and style applicant and venue.
+  # treat titles as literal data
+  # format initials and style applicant and venue
   own_authors <- vapply(own_authors, cva_short_author, character(1))
   segments <- list()
   add <- function(value, style = "plain") {
@@ -647,7 +651,8 @@ cva_citation_segments <- function(
     if (index == venue_index) {
       add(value, "venue")
     } else if (index == 1L) {
-      # Semicolons delimit workbook data; displayed authors use commas.
+      # semicolons delimit workbook data
+      # displayed authors use commas
       authors <- strsplit(value, ";", fixed = TRUE)[[1]]
       for (i in seq_along(authors)) {
         if (i > 1L) {
@@ -742,7 +747,7 @@ cva_keywords <- function(value) {
   )
 }
 cva_duration <- function(start, end = "", as_of, lang, override = NULL) {
-  # Durations are evaluated at the CV date, making a saved CV reproducible.
+  # durations are evaluated at the CV date, making a saved CV reproducible
   suffix <- if (lang == "es") "meses" else "months"
   display <- function(value) {
     format(
@@ -1291,20 +1296,41 @@ cva_prepare <- function(
         ))
         if (lang == "en") {
           title <- cva_text(row$titulo_cva_en)
-          if (!nzchar(title)) title <- req("titulo")
+          if (!nzchar(title)) {
+            title <- req("titulo")
+          }
           title <- sub("[.]$", "", title)
           institution <- cva_text(row$institucion_ip_en)
-          if (!nzchar(institution)) institution <- pi_institution
-          own_lead <- grepl("principal investigator|project lead", tolower(loc("rol", TRUE)))
-          leader <- if (!own_lead) paste0(
-            pi_label, ": ", pi_display,
-            if (nzchar(institution)) paste0(" (", institution, ")") else ""
-          ) else ""
+          if (!nzchar(institution)) {
+            institution <- pi_institution
+          }
+          own_lead <- grepl(
+            "principal investigator|project lead",
+            tolower(loc("rol", TRUE))
+          )
+          leader <- if (!own_lead) {
+            paste0(
+              pi_label,
+              ": ",
+              pi_display,
+              if (nzchar(institution)) paste0(" (", institution, ")") else ""
+            )
+          } else {
+            ""
+          }
           academic_host <- cva_text(row$investigador_anfitrion)
-          host_details <- if (nzchar(host)) paste0(
-            "Host: ",
-            if (nzchar(academic_host)) paste0(academic_host, " (", host, ")") else host
-          ) else ""
+          host_details <- if (nzchar(host)) {
+            paste0(
+              "Host: ",
+              if (nzchar(academic_host)) {
+                paste0(academic_host, " (", host, ")")
+              } else {
+                host
+              }
+            )
+          } else {
+            ""
+          }
           facilities <- cva_text(row$infraestructuras)
           compact_period <- gsub(" – ", "–", period, fixed = TRUE)
           if (nzchar(cva_text(row$participacion_meses))) {
@@ -1318,20 +1344,41 @@ cva_prepare <- function(
             host_details,
             if (nzchar(facilities)) paste0("Access facilities: ", facilities),
             compact_period,
-            paste0(amount_label, cva_amount(row, lang,
-              digits = if (amount == floor(amount)) 0L else 2L, symbols = TRUE))
+            paste0(
+              amount_label,
+              cva_amount(
+                row,
+                lang,
+                digits = if (amount == floor(amount)) 0L else 2L,
+                symbols = TRUE
+              )
+            )
           )
           details <- paste(parts[nzchar(parts)], collapse = "; ")
           role <- cva_text(row$rol_cva_en)
-          if (!nzchar(role)) role <- loc("rol", TRUE)
+          if (!nzchar(role)) {
+            role <- loc("rol", TRUE)
+          }
           role <- sub("[.]$", "", role)
           if (nzchar(cva_text(row$participacion_meses))) {
-            role <- paste0(role, ", with ",
-              cva_duration("", "", as_of = "", lang = lang, override = row$participacion_meses),
-              " of participation")
+            role <- paste0(
+              role,
+              ", with ",
+              cva_duration(
+                "",
+                "",
+                as_of = "",
+                lang = lang,
+                override = row$participacion_meses
+              ),
+              " of participation"
+            )
           }
-          result$proyectos_detalle[[length(result$proyectos_detalle) + 1L]] <- list(
-            titulo = paste0(title, "."), detalles = details,
+          result$proyectos_detalle[[
+            length(result$proyectos_detalle) + 1L
+          ]] <- list(
+            titulo = paste0(title, "."),
+            detalles = details,
             periodo = gsub(" – ", "–", period, fixed = TRUE),
             papel = paste0(role, ".")
           )
