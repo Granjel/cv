@@ -910,6 +910,7 @@ cva_prepare <- function(
     resumen = summary,
     publicaciones_detalle = list(),
     congresos_detalle = list(),
+    proyectos_detalle = list(),
     duracion_actual = if (any(c("fecha_inicio", "fecha_cva") %in% missing)) {
       label
     } else {
@@ -1288,6 +1289,54 @@ cva_prepare <- function(
           loc("estado", TRUE),
           loc("contribucion")
         ))
+        if (lang == "en") {
+          title <- cva_text(row$titulo_cva_en)
+          if (!nzchar(title)) title <- req("titulo")
+          title <- sub("[.]$", "", title)
+          institution <- cva_text(row$institucion_ip_en)
+          if (!nzchar(institution)) institution <- pi_institution
+          own_lead <- grepl("principal investigator|project lead", tolower(loc("rol", TRUE)))
+          leader <- if (!own_lead) paste0(
+            pi_label, ": ", pi_display,
+            if (nzchar(institution)) paste0(" (", institution, ")") else ""
+          ) else ""
+          academic_host <- cva_text(row$investigador_anfitrion)
+          host_details <- if (nzchar(host)) paste0(
+            "Host: ",
+            if (nzchar(academic_host)) paste0(academic_host, " (", host, ")") else host
+          ) else ""
+          facilities <- cva_text(row$infraestructuras)
+          compact_period <- gsub(" – ", "–", period, fixed = TRUE)
+          if (nzchar(cva_text(row$participacion_meses))) {
+            compact_period <- paste0("Participation: ", compact_period)
+          }
+          programme <- c(cva_text(row$convocatoria), req("financiador"))
+          parts <- c(
+            if (nzchar(reference)) paste0("Ref. ", reference),
+            paste(programme[nzchar(programme)], collapse = ", "),
+            leader,
+            host_details,
+            if (nzchar(facilities)) paste0("Access facilities: ", facilities),
+            compact_period,
+            paste0(amount_label, cva_amount(row, lang,
+              digits = if (amount == floor(amount)) 0L else 2L, symbols = TRUE))
+          )
+          details <- paste(parts[nzchar(parts)], collapse = "; ")
+          role <- cva_text(row$rol_cva_en)
+          if (!nzchar(role)) role <- loc("rol", TRUE)
+          role <- sub("[.]$", "", role)
+          if (nzchar(cva_text(row$participacion_meses))) {
+            role <- paste0(role, ", with ",
+              cva_duration("", "", as_of = "", lang = lang, override = row$participacion_meses),
+              " of participation")
+          }
+          result$proyectos_detalle[[length(result$proyectos_detalle) + 1L]] <- list(
+            titulo = paste0(title, "."), detalles = details,
+            periodo = gsub(" – ", "–", period, fixed = TRUE),
+            papel = paste0(role, ".")
+          )
+          entry <- paste0(title, ". ", details, "; Role: ", role, ".")
+        }
       } else {
         kind <- req("tipo")
         if (!kind %in% c("contrato", "patente", "otro")) {

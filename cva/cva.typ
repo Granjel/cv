@@ -270,7 +270,27 @@
   "C.3. Proyectos de investigación",
   "C.3. Research projects",
 ))
-#contribution-list(cv.proyectos)
+#let projects = cv.at("proyectos_detalle", default: ())
+#let project-metadata(entry) = {
+  for (i, part) in entry.detalles.split(entry.periodo).enumerate() {
+    if i > 0 { box(entry.periodo) }
+    part
+  }
+}
+#if not es and projects.len() > 0 {
+  enum(
+    numbering: "1.",
+    indent: 0pt,
+    body-indent: 19pt,
+    tight: false,
+    spacing: entry-gap,
+    ..projects.map(entry => prose(breakable: false)[
+      #strong(entry.titulo) #project-metadata(entry)#text("; ")#strong("Role:") #entry.papel
+    ]),
+  )
+} else {
+  contribution-list(cv.proyectos)
+}
 #subsection(tr(
   "C.4. Transferencia de conocimiento y tecnología",
   "C.4. Knowledge and technology transfer",
