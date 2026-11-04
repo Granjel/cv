@@ -28,7 +28,7 @@
       align: (left, center, right),
       [],
       if counter(page).get().first() > 1 { counter(page).display() } else { [] },
-      if draft { text(fill: rgb("666666"))[#tr("BORRADOR", "DRAFT")] } else { [] },
+      [],
     )
   },
 )
@@ -38,16 +38,20 @@
 #let subsection-heading-gap = 7pt
 #let prose-leading = 0.6em
 #let entry-gap = prose-leading
+#let narrative-paragraph-gap = 11pt
 #let section(body, above: 18pt) = block(above: above, below: part-heading-gap, sticky: true)[#strong(body)]
 #let subsection(body, above: 12pt) = block(above: above, below: subsection-heading-gap, sticky: true)[#strong(body)]
 #let grid-table(columns, ..cells) = block(above: 0pt, below: 0pt)[
   #set align(left)
   #set par(leading: 0.4em, spacing: 0pt, justify: false)
-  #table(columns: columns, inset: (x: 3pt, y: 2.5pt), stroke: 0.4pt, ..cells.pos())
+  #table(columns: columns, align: left + horizon, inset: (left: 5pt, right: 3pt, top: 2.5pt, bottom: 2.5pt), stroke: 0.4pt, ..cells.pos())
 ]
-#let label(body) = body
-#let column-label(body) = table.cell(align: center)[#body]
-#let first-column = 42mm
+#let label-fill = rgb("D8D8D8")
+#let label(body) = table.cell(fill: label-fill)[#body]
+#let column-label(body) = table.cell(align: center + horizon, fill: label-fill)[#body]
+#let first-column = 32mm
+#let information-columns = (first-column, 59mm, 26mm, 43mm)
+#let career-column = 54mm
 #let display-date(value) = value.split("-").rev().join("/")
 #let hyperlink(target, label: none, accent: true) = {
   let body = if label == none { target } else { label }
@@ -58,6 +62,24 @@
 } else {
   value
 }
+// Department links apply only to the institution names in A.1 and A.2.
+// Original department pages are retained where no translated page was found.
+#let institution-pages = (
+  "Basque Centre for Climate Change (BC3)": tr(
+    "https://www.bc3research.org/es/investigacion/investigacion/ecosistemas-terrestres/",
+    "https://www.bc3research.org/en/research/research/terrestrial-ecosystems/",
+  ),
+  "North Carolina State University": "https://cals.ncsu.edu/plant-and-microbial-biology/",
+  "Universidad de Sevilla": "https://www.us.es/centros/departamentos/biologia-vegetal-y-ecologia",
+  "IRNAS-CSIC": tr(
+    "https://www.irnas.csic.es/es/investigacion/departamentos/biogeoquimica-ecologia-vegetal-y-microbiana/",
+    "https://www.irnas.csic.es/en/research/departments/biogeochemistry-plant-ecology-and-microbial-ecology/",
+  ),
+)
+#let linked-institution(value) = {
+  let target = institution-pages.at(value, default: none)
+  if target == none { value } else { link(target, value) }
+}
 #let citation(entry, journal: false) = {
   for segment in entry.segmentos {
     if segment.style == "author" { strong(segment.text) } else if segment.style == "venue" {
@@ -65,12 +87,7 @@
     } else if segment.style == "nowrap" {
       box(segment.text)
     } else if segment.style == "code" {
-      let comparison = segment.text.split("<")
-      if comparison.len() == 2 {
-        box[#comparison.at(0).trim()#h(0.25em)#sym.lt#h(0.25em)#comparison.at(1).trim()]
-      } else {
-        box(segment.text)
-      }
+      box[“#text(font: "Consolas", size: 10.5pt, segment.text)”]
     } else { segment.text }
   }
 }
@@ -110,16 +127,16 @@
 })]
 #let publication(entry) = {
   let types = (
-    articulo: tr("Artículo científico.", "Journal article."),
-    libro: tr("Libro.", "Book."),
-    capitulo: tr("Capítulo de libro.", "Book chapter."),
-    datos: tr("Datos.", "Dataset."),
-    software: tr("Software.", "Software."),
+    articulo: tr("Artículo científico:", "Journal article:"),
+    libro: tr("Libro:", "Book:"),
+    capitulo: tr("Capítulo de libro:", "Book chapter:"),
+    datos: tr("Datos:", "Dataset:"),
+    software: tr("Software:", "Software:"),
   )
   [
     #emph(types.at(entry.tipo)) #citation(entry, journal: true)
     #if entry.doi != "" {
-      hyperlink("https://doi.org/" + entry.doi)
+      hyperlink("https://doi.org/" + entry.doi, label: "doi: " + entry.doi)
     }
     #publication-context[
       #entry.autoria #entry.contribucion
@@ -133,53 +150,50 @@
 #v(3mm)
 #block(below: part-heading-gap, sticky: true)[
   #grid(
-    columns: (1fr, 71mm),
+    columns: (91mm, 69mm),
     align: left + horizon,
     strong(tr("Parte A. DATOS PERSONALES", "Part A. PERSONAL INFORMATION")),
-    grid-table((46mm, 25mm), strong(tr("Fecha del CVA", "CVA date")), table.cell(align: center)[#display-date(
+    grid-table((26mm, 43mm), label(strong(tr("Fecha CVA", "CVA date"))), table.cell(align: center + horizon)[#display-date(
       p.fecha_cva,
     )]),
   )
 ]
 #grid-table(
-  (first-column, 39mm, 48mm, 31mm),
+  information-columns,
   label(tr("Nombre", "First name")),
   table.cell(colspan: 3)[#p.nombre],
   label(tr("Apellidos", "Family name")),
   table.cell(colspan: 3)[#p.apellidos],
   label(tr("Sexo", "Gender")),
   p.sexo,
-  label(tr("Fecha de Nacimiento", "Birth date")),
+  label(tr("Fecha nac.", "Birth date")),
   display-date(p.fecha_nacimiento),
   label(tr("DNI", "ID number")),
   table.cell(colspan: 3)[#p.documento],
-  label("URL Web"),
-  table.cell(colspan: 3)[#web-link(p.web)],
-  label(tr("Dirección Email", "Email")),
-  table.cell(colspan: 3)[#if p.email.contains("@") {
+  label("Email"),
+  if p.email.contains("@") {
     hyperlink("mailto:" + p.email, label: p.email, accent: false)
-  } else { p.email }],
-  table.cell(colspan: 2)[ORCID (Open Researcher and Contributor ID)],
+  } else { p.email },
+  label("URL Web"),
+  web-link(p.web),
+  table.cell(colspan: 2, fill: label-fill)[Open Researcher and Contributor ID (ORCID)],
   table.cell(colspan: 2)[#if p.orcid.starts-with("000") {
     hyperlink("https://orcid.org/" + p.orcid, label: p.orcid, accent: false)
   } else { p.orcid }],
 )
 #subsection(tr("A.1. Situación profesional actual", "A.1. Current position"))
 #grid-table(
-  (first-column, 48mm, 30mm, 40mm),
+  information-columns,
   label(tr("Puesto", "Position")),
   table.cell(colspan: 3)[#p.puesto],
   label(tr("Fecha inicio", "Start date")),
   table.cell(colspan: 3)[#{
     let note = p.at("nota_fecha_inicio", default: "")
     display-date(p.fecha_inicio) + " (" + cv.duracion_actual + (if note != "" { "*" } else { "" }) + ")"
-    if note != "" {
-      linebreak()
-      "*" + note
-    }
+
   }],
-  label(tr("Organismo / Institución", "Institution")),
-  table.cell(colspan: 3)[#p.institucion],
+  label(tr("Institución", "Institution")),
+  table.cell(colspan: 3)[#linked-institution(p.institucion)],
   label(tr("Departamento", "Department")),
   table.cell(colspan: 3)[#p.departamento],
   label(tr("País", "Country")),
@@ -189,9 +203,16 @@
   label(tr("Palabras clave", "Keywords")),
   table.cell(colspan: 3)[#p.palabras_clave],
 )
+#let leave-note = p.at("nota_fecha_inicio", default: "")
+#if leave-note != "" {
+  block(above: 4pt, below: 0pt)[
+    #set par(leading: 0.4em, spacing: 0pt, justify: false)
+    #("*" + leave-note)
+  ]
+}
 #subsection(tr("A.2. Situación profesional anterior", "A.2. Previous positions"))
 #grid-table(
-  (first-column, 1fr),
+  (career-column, 1fr),
   table.header(column-label(tr("Periodo", "Period")), column-label(tr(
     "Puesto / Institución / País",
     "Position / Institution / Country",
@@ -199,8 +220,8 @@
   ..cv
     .experiencia
     .map(r => (
-      table.cell(align: left + horizon)[#r.periodo #linebreak() (#r.duracion)],
-      table.cell(align: left + horizon)[#r.puesto#if r.tipo == "puesto" { " / " + r.institucion + " / " + r.pais }#if (
+      table.cell(align: left + horizon)[#r.periodo (#r.duracion)],
+      table.cell(align: left + horizon)[#r.puesto#if r.tipo == "puesto" { [#(" / ")#linked-institution(r.institucion)#(" / " + r.pais)] }#if (
           r.interrupcion != ""
         ) {
           [. #r.interrupcion]
@@ -210,17 +231,24 @@
 )
 #subsection(tr("A.3. Formación académica", "A.3. Education"))
 #grid-table(
-  (64mm, 82mm, 14mm),
+  (career-column, 92mm, 14mm),
   table.header(
     column-label(tr("Licenciatura/Grado/Doctorado", "Degree / Master's / PhD")),
     column-label(tr("Universidad / País", "University / Country")),
     column-label(tr("Año", "Year")),
   ),
-  ..cv.formacion.map(r => (r.titulo, r.universidad, table.cell(align: center)[#r.anio])).flatten(),
+  ..cv.formacion.map(r => (r.titulo, r.universidad, table.cell(align: center + horizon)[#r.anio])).flatten(),
 )
 #section(tr("Parte B. RESUMEN DEL CV", "Part B. CV SUMMARY"))
 #for paragraph in cv.resumen.split("\n\n") {
-  prose(paragraph, below: 11pt)
+  prose(below: narrative-paragraph-gap)[
+    #let parts = paragraph.split(": ")
+    #if parts.len() > 1 and parts.first().len() < 70 {
+      [#strong(parts.first() + ":") #parts.slice(1).join(": ")]
+    } else {
+      paragraph
+    }
+  ]
 }
 #section(tr("Parte C. MÉRITOS RELEVANTES", "Part C. RELEVANT MERITS"))
 #set par(leading: prose-leading, spacing: prose-leading, justify: true)
@@ -259,9 +287,13 @@
     body-indent: 19pt,
     tight: false,
     spacing: entry-gap,
-    ..conferences.map(entry => prose(breakable: entry.cita.len() > 1500)[#emph(
-        entry.tipo + ".",
-      ) #citation(entry)]),
+    ..conferences.map(entry => prose(breakable: entry.cita.len() > 1500)[
+      #show regex("\\b[0-9]+(st|nd|rd|th)\\b"): it => {
+        let ordinal = it.text.match(regex("([0-9]+)(st|nd|rd|th)"))
+        [#ordinal.captures.at(0)#super(size: 0.75em, ordinal.captures.at(1))]
+      }
+      #emph(entry.tipo + ":") #citation(entry)
+    ]),
   )
 } else {
   contribution-list(cv.congresos)
@@ -277,7 +309,15 @@
     part
   }
 }
-#if not es and projects.len() > 0 {
+#let project-title(value) = {
+  let parts = value.split(" – ")
+  if parts.len() > 1 {
+    parts.first() + ": " + parts.slice(1).join(" – ")
+  } else {
+    value
+  }
+}
+#if projects.len() > 0 {
   enum(
     numbering: "1.",
     indent: 0pt,
@@ -285,7 +325,8 @@
     tight: false,
     spacing: entry-gap,
     ..projects.map(entry => prose(breakable: false)[
-      #strong(entry.titulo) #project-metadata(entry)#text("; ")#strong("Role:") #entry.papel
+      #project-title(entry.titulo) #project-metadata(entry)
+      #publication-context[#entry.papel]
     ]),
   )
 } else {
@@ -295,4 +336,15 @@
   "C.4. Transferencia de conocimiento y tecnología",
   "C.4. Knowledge and technology transfer",
 ))
-#contribution-list(cv.transferencia)
+#show regex("https://doi[.]org/10[.][0-9]+/[A-Za-z0-9._/-]*[A-Za-z0-9]"): it => hyperlink(
+  it.text, label: it.text.replace("https://doi.org/", "doi: "),
+)
+#show "Granjel RR": strong
+#let transfer-narrative = cv.at("transferencia_narrativa", default: "")
+#if transfer-narrative != "" {
+  for paragraph in transfer-narrative.split("\n\n") {
+    prose(paragraph, below: narrative-paragraph-gap)
+  }
+} else {
+  contribution-list(cv.transferencia)
+}
