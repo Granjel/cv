@@ -87,7 +87,7 @@
 // department links apply only to the institution names in A.1 and A.2
 // original department pages are retained where no translated page was found
 #let institution-pages = (
-  "Basque Centre for Climate Change (BC3)": tr(
+  "BC3 – Basque Centre for Climate Change": tr(
     "https://www.bc3research.org/es/investigacion/investigacion/ecosistemas-terrestres/",
     "https://www.bc3research.org/en/research/research/terrestrial-ecosystems/",
   ),
@@ -123,18 +123,6 @@
   #set par(leading: prose-leading, justify: true)
   #body
 ]
-#let contribution-list(entries) = {
-  if entries.len() > 0 {
-    enum(
-      numbering: "1.",
-      indent: 0pt,
-      body-indent: 19pt,
-      tight: false,
-      spacing: entry-gap,
-      ..entries.map(entry => prose(entry, breakable: entry.len() > 1500)),
-    )
-  }
-}
 #let publication-context(body) = block(width: 100%, above: prose-leading, below: 0pt)[#layout(size => {
   let content = block(width: size.width, above: 0pt, below: 0pt, inset: (left: 10pt))[#body]
   let height = measure(content).height
@@ -164,9 +152,6 @@
   ]
 }
 
-#if cv.demo {
-  align(center)[*#tr("EJEMPLO FICTICIO · NO PRESENTAR", "FICTIONAL EXAMPLE · DO NOT SUBMIT")*]
-}
 #v(3mm)
 #block(below: part-heading-gap, sticky: true)[
   #grid(
@@ -242,13 +227,7 @@
     .experiencia
     .map(r => (
       table.cell(align: left + horizon)[#r.periodo (#r.duracion)],
-      table.cell(align: left + horizon)[#r.puesto#if r.tipo == "puesto" {
-          [#" / "#linked-institution(r.institucion)#(" / " + r.pais)]
-        }#if (
-          r.interrupcion != ""
-        ) {
-          [. #r.interrupcion]
-        }],
+      table.cell(align: left + horizon)[#r.puesto#" / "#linked-institution(r.institucion)#(" / " + r.pais)],
     ))
     .flatten(),
 )
@@ -275,8 +254,7 @@
   ),
   above: 0pt,
 )
-#let publication-details = cv.at("publicaciones_detalle", default: ())
-#if publication-details.len() > 0 {
+#if cv.publicaciones_detalle.len() > 0 {
   set par(justify: true)
   enum(
     numbering: "1.",
@@ -284,18 +262,15 @@
     body-indent: 19pt,
     tight: false,
     spacing: entry-gap,
-    ..publication-details.map(entry => prose(
+    ..cv.publicaciones_detalle.map(entry => prose(
       breakable: entry.cita.len() + entry.autoria.len() + entry.contribucion.len() > 1500,
     )[#publication(
       entry,
     )]),
   )
-} else {
-  contribution-list(cv.publicaciones)
 }
 #subsection(tr("C.2. Congresos", "C.2. Conferences"))
-#let conferences = cv.at("congresos_detalle", default: ())
-#if conferences.len() > 0 {
+#if cv.congresos_detalle.len() > 0 {
   set par(justify: true)
   enum(
     numbering: "1.",
@@ -303,7 +278,7 @@
     body-indent: 19pt,
     tight: false,
     spacing: entry-gap,
-    ..conferences.map(entry => prose(breakable: entry.cita.len() > 1500)[
+    ..cv.congresos_detalle.map(entry => prose(breakable: entry.cita.len() > 1500)[
       #show regex("\\b[0-9]+(st|nd|rd|th)\\b"): it => {
         let ordinal = it.text.match(regex("([0-9]+)(st|nd|rd|th)"))
         [#ordinal.captures.at(0)#super(size: 0.75em, ordinal.captures.at(1))]
@@ -311,42 +286,29 @@
       #emph(entry.tipo + ":") #citation(entry)
     ]),
   )
-} else {
-  contribution-list(cv.congresos)
 }
 #subsection(tr(
   "C.3. Proyectos de investigación",
   "C.3. Research projects",
 ))
-#let projects = cv.at("proyectos_detalle", default: ())
 #let project-metadata(entry) = {
   for (i, part) in entry.detalles.split(entry.periodo).enumerate() {
     if i > 0 { box(entry.periodo) }
     part
   }
 }
-#let project-title(value) = {
-  let parts = value.split(" – ")
-  if parts.len() > 1 {
-    parts.first() + ": " + parts.slice(1).join(" – ")
-  } else {
-    value
-  }
-}
-#if projects.len() > 0 {
+#if cv.proyectos_detalle.len() > 0 {
   enum(
     numbering: "1.",
     indent: 0pt,
     body-indent: 19pt,
     tight: false,
     spacing: entry-gap,
-    ..projects.map(entry => prose(breakable: false)[
-      #project-title(entry.titulo) #project-metadata(entry)
+    ..cv.proyectos_detalle.map(entry => prose(breakable: false)[
+      #entry.titulo #project-metadata(entry)
       #publication-context[#entry.papel]
     ]),
   )
-} else {
-  contribution-list(cv.proyectos)
 }
 #subsection(tr(
   "C.4. Transferencia de conocimiento y tecnología",
