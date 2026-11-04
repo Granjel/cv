@@ -63,34 +63,22 @@ if (.Platform$OS.type == "windows") {
 # required workbook columns
 # optional columns and auxiliary sheets remain in Excel
 cva_schema <- list(
-  Perfil = list(
-    headers = c(
-      "campo",
-      "valor",
-      "es",
-      "en"
-    )
-  ),
+  Perfil = list(headers = c("campo", "valor", "ingles")),
   Experiencia = list(
     headers = c(
-      "id",
-      "incluir_cva",
+      "incluir",
       "inicio",
       "fin",
       "puesto_es",
       "puesto_en",
       "institucion",
       "pais_es",
-      "pais_en",
-      "motivo_es",
-      "motivo_en",
-      "meses_interrupcion"
+      "pais_en"
     )
   ),
   Formacion = list(
     headers = c(
-      "id",
-      "incluir_cva",
+      "incluir",
       "fecha",
       "titulo_es",
       "titulo_en",
@@ -101,87 +89,58 @@ cva_schema <- list(
   ),
   Publicaciones = list(
     headers = c(
-      "id",
-      "incluir_cva",
+      "incluir",
+      "estado",
       "fecha",
       "tipo",
+      "titulo",
       "autores",
       "posicion_autor",
       "correspondencia",
-      "titulo",
       "revista_editorial",
       "volumen",
       "paginas",
       "doi",
       "isbn",
       "contribucion_es",
-      "contribucion_en"
+      "contribucion_en",
+      "datos_codigo",
+      "autores_iniciales"
     )
   ),
   Congresos = list(
     headers = c(
-      "id",
-      "incluir_cva",
+      "incluir",
       "fecha",
-      "titulo",
-      "autores",
+      "tipo",
       "modalidad_es",
       "modalidad_en",
+      "titulo",
+      "autores",
       "congreso",
-      "lugar"
+      "lugar_es",
+      "lugar_en"
     )
   ),
   Proyectos = list(
     headers = c(
-      "id",
-      "incluir_cva",
+      "incluir",
       "inicio",
       "fin",
       "referencia",
-      "titulo",
+      "titulo_es",
+      "titulo_en",
       "financiador",
       "convocatoria",
-      "ip",
-      "institucion_ip",
+      "direccion_es",
+      "direccion_en",
       "importe",
       "moneda",
-      "rol_es",
-      "rol_en",
-      "estado_es",
-      "estado_en",
+      "tipo_importe",
+      "acceso",
+      "estado",
       "contribucion_es",
       "contribucion_en"
-    )
-  ),
-  Transferencia = list(
-    headers = c(
-      "id",
-      "incluir_cva",
-      "fecha",
-      "fin",
-      "tipo",
-      "autores",
-      "referencia",
-      "titulo",
-      "entidad",
-      "ip",
-      "institucion_ip",
-      "importe",
-      "moneda",
-      "paises_prioridad",
-      "titular",
-      "explotacion_es",
-      "explotacion_en",
-      "empresas",
-      "descripcion_es",
-      "descripcion_en"
-    )
-  ),
-  Textos = list(
-    headers = c(
-      "clave",
-      "es",
-      "en"
     )
   )
 )
@@ -213,7 +172,7 @@ cva_error <- function(...) stop(..., call. = FALSE)
 
 # check the four runtime packages without installing anything during a build
 cva_dependencies <- function() {
-  needed <- c("readxl", "jsonlite", "xml2", "pdftools")
+  needed <- c("readxl", "jsonlite", "xml2", "pdftools", "commonmark")
   missing <- needed[
     !vapply(needed, requireNamespace, logical(1), quietly = TRUE)
   ]
@@ -273,8 +232,8 @@ cva_localized <- function(row, key, lang, mandatory = FALSE) {
   value
 }
 
-# add first-month/day placeholders only for calculations, preserving displayed
-# precision
+# supply first-month/day anchors for calculations
+# preserve the precision displayed in the document
 cva_expand_date <- function(value) {
   paste0(
     value,
@@ -382,6 +341,43 @@ cva_project_details <- function(before, period, after) {
 }
 
 # load the required sheets, retaining optional columns for section formatters
+# map the compact workbook headers to the internal document fields
+cva_import_row <- function(row, name, index, count) {
+  if (name == "Perfil") {
+    english <- cva_text(row$ingles)
+    if (nzchar(english)) {
+      row$es <- row$valor
+      row$en <- row$ingles
+      row$valor <- ""
+    } else {
+      row$es <- ""
+      row$en <- ""
+    }
+    return(row)
+  }
+  # row order resolves date ties without exposing technical IDs in Excel
+  row$id <- sprintf("fila_%08d", count - index + 1L)
+  row$incluir_cva <- if (nzchar(cva_text(row$incluir))) row$incluir else "SI"
+  if (name == "Congresos") {
+    # backticks mark the existing inline code fragment directly in the title
+    title <- cva_text(row$titulo)
+    spans <- regmatches(title, gregexpr("`[^`]+`", title))[[1]]
+    if (length(spans) > 1L) {
+      cva_error(
+        row$context,
+        ": usa un solo fragmento entre backticks en el título."
+      )
+    }
+    row$titulo_codigo <- ""
+    if (length(spans)) {
+      row$titulo_codigo <- substring(spans, 2L, nchar(spans) - 1L)
+      row$titulo <- sub(spans, row$titulo_codigo, title, fixed = TRUE)
+    }
+  }
+  row
+}
+
+# load and validate the compact workbook without storing intermediate files
 cva_read_excel <- function(filename, root = cva_root) {
   cva_dependencies()
   schema <- cva_schema
@@ -430,8 +426,6 @@ cva_read_excel <- function(filename, root = cva_root) {
     seen <- character()
     key <- if (name == "Perfil") {
       "campo"
-    } else if (name == "Textos") {
-      "clave"
     } else {
       "id"
     }
@@ -447,6 +441,7 @@ cva_read_excel <- function(filename, root = cva_root) {
         next
       }
       row$context <- paste0(name, ", fila ", i + 1L)
+      row <- cva_import_row(row, name, i, nrow(frame))
       id <- cva_required(row, key)
       if (id %in% seen) {
         cva_error(row$context, ": ", key, " duplicado: ", id)
@@ -882,19 +877,176 @@ cva_today <- function(now = Sys.time()) {
 
 # resolve Part A, its automatic/manual date, and the editable B/C.4 narrative
 # text
-cva_prepare_header <- function(tables, lang, demo, draft, render_date) {
+# convert supported inline Markdown nodes to literal, typed JSON data
+cva_markdown_inline <- function(nodes, context) {
+  lapply(seq_along(nodes), function(i) {
+    node <- nodes[[i]]
+    type <- xml2::xml_name(node)
+    if (type %in% c("text", "code")) {
+      return(list(type = type, text = xml2::xml_text(node)))
+    }
+    if (type == "softbreak") {
+      return(list(type = "text", text = " "))
+    }
+    if (type == "linebreak") {
+      return(list(type = "linebreak"))
+    }
+    if (type %in% c("strong", "emph")) {
+      return(list(
+        type = type,
+        children = cva_markdown_inline(xml2::xml_children(node), context)
+      ))
+    }
+    if (type == "link") {
+      return(list(
+        type = type,
+        destination = xml2::xml_attr(node, "destination"),
+        children = cva_markdown_inline(xml2::xml_children(node), context)
+      ))
+    }
+    cva_error(
+      context,
+      ": unsupported inline Markdown element '",
+      type,
+      "'; use plain text, bold, italics, links or inline code."
+    )
+  })
+}
+
+# count only visible text, including explicit breaks and paragraph separators
+cva_markdown_plain <- function(nodes) {
+  paste0(
+    vapply(
+      nodes,
+      function(node) {
+        if (node$type %in% c("text", "code")) {
+          node$text
+        } else if (node$type == "linebreak") {
+          "\n"
+        } else {
+          cva_markdown_plain(node$children)
+        }
+      },
+      character(1)
+    ),
+    collapse = ""
+  )
+}
+
+# read the two editable sections without interpreting HTML or Typst code
+cva_read_markdown <- function(filename) {
+  if (!file.exists(filename)) {
+    cva_error("Missing narrative Markdown file: ", filename)
+  }
+  context <- basename(filename)
+  markdown <- paste(
+    readLines(filename, encoding = "UTF-8", warn = FALSE),
+    collapse = "\n"
+  )
+  tree <- commonmark::markdown_xml(
+    markdown,
+    smart = FALSE,
+    normalize = FALSE,
+    footnotes = FALSE,
+    extensions = FALSE
+  )
+  document <- xml2::read_xml(tree, options = c("NONET", "NOBLANKS"))
+  xml2::xml_ns_strip(document)
+  blocks <- xml2::xml_children(document)
+  sections <- list(resumen = list(), transferencia = list())
+  headings <- c("Part B" = "resumen", "C.4" = "transferencia")
+  seen <- character()
+  current <- NULL
+
+  # section headings select the destination and are not rendered or counted
+  for (i in seq_along(blocks)) {
+    block <- blocks[[i]]
+    type <- xml2::xml_name(block)
+    if (type == "heading") {
+      title <- xml2::xml_text(block)
+      if (
+        xml2::xml_attr(block, "level") != "1" ||
+          !title %in% names(headings)
+      ) {
+        cva_error(
+          context,
+          ": use only '# Part B' and '# C.4' as section headings; ",
+          "use bold text for labels inside a section."
+        )
+      }
+      current <- unname(headings[[title]])
+      if (current %in% seen) {
+        cva_error(context, ": duplicate section heading '# ", title, "'.")
+      }
+      seen <- c(seen, current)
+      next
+    }
+    if (is.null(current)) {
+      cva_error(context, ": narrative text must follow '# Part B' or '# C.4'.")
+    }
+    if (type != "paragraph") {
+      cva_error(
+        context,
+        ": unsupported Markdown block '",
+        type,
+        "'; use paragraphs with bold, italics, links or inline code."
+      )
+    }
+    sections[[current]][[length(sections[[current]]) + 1L]] <-
+      cva_markdown_inline(xml2::xml_children(block), context)
+  }
+
+  # preserve the old plain-text contract for limits and change comparisons
+  missing <- setdiff(unname(headings), seen)
+  if (length(missing)) {
+    cva_error(context, ": include both '# Part B' and '# C.4' headings.")
+  }
+  result <- lapply(sections, function(paragraphs) {
+    list(
+      text = paste(
+        vapply(
+          paragraphs,
+          cva_markdown_plain,
+          character(1)
+        ),
+        collapse = "\n\n"
+      ),
+      paragraphs = paragraphs
+    )
+  })
+  if (!nzchar(result$resumen$text)) {
+    cva_error(context, ": Part B cannot be empty.")
+  }
+  result
+}
+
+# collect declared inline code so PDF font checks can validate its actual text
+cva_markdown_code <- function(nodes) {
+  unlist(
+    lapply(nodes, function(node) {
+      if (node$type == "code") {
+        return(node$text)
+      }
+      if (!is.null(node$children)) {
+        return(cva_markdown_code(node$children))
+      }
+      character()
+    }),
+    use.names = FALSE
+  )
+}
+
+cva_prepare_header <- function(tables, lang, demo, draft, render_date, root) {
   profile_rows <- setNames(
     tables$Perfil,
     vapply(tables$Perfil, `[[`, character(1), "campo")
   )
   # require explicit demo mode before using a workbook marked as fictitious
-  if (is.null(profile_rows$datos_de_ejemplo)) {
-    cva_error("Perfil: falta datos_de_ejemplo.")
-  }
-  example <- cva_bool(
-    profile_rows$datos_de_ejemplo$valor,
-    "Perfil: datos_de_ejemplo"
-  )
+  example <- !is.null(profile_rows$datos_de_ejemplo) &&
+    cva_bool(
+      profile_rows$datos_de_ejemplo$valor,
+      "Perfil: datos_de_ejemplo"
+    )
   if (example && !demo) {
     cva_error("El libro contiene ejemplos ficticios. Usa --demo para probarlo.")
   }
@@ -963,11 +1115,8 @@ cva_prepare_header <- function(tables, lang, demo, draft, render_date) {
   }
   profile$palabras_clave <- cva_keywords(profile$palabras_clave)
   # read the editable narrative sections and enforce the Part B character limit
-  texts <- setNames(
-    tables$Textos,
-    vapply(tables$Textos, `[[`, character(1), "clave")
-  )
-  summary <- cva_required(texts$resumen, lang, "Textos: resumen")
+  narrative <- cva_read_markdown(file.path(root, "input", paste0(lang, ".md")))
+  summary <- narrative$resumen$text
   if (nchar(summary, type = "chars") > 5000L) {
     cva_error(
       "El resumen ",
@@ -985,7 +1134,17 @@ cva_prepare_header <- function(tables, lang, demo, draft, render_date) {
     campos_pendientes = as.list(missing),
     perfil = profile,
     resumen = summary,
-    transferencia_narrativa = cva_text(texts$transferencia[[lang]]),
+    resumen_parrafos = narrative$resumen$paragraphs,
+    transferencia_narrativa = narrative$transferencia$text,
+    transferencia_parrafos = narrative$transferencia$paragraphs,
+    codigo_markdown = unlist(
+      lapply(
+        c(narrative$resumen$paragraphs, narrative$transferencia$paragraphs),
+        cva_markdown_code
+      ),
+      use.names = FALSE
+    ),
+    transferencia = list(),
     publicaciones_detalle = list(),
     congresos_detalle = list(),
     proyectos_detalle = list(),
@@ -1286,31 +1445,29 @@ cva_prepare_conference <- function(row, lang, applicant_authors) {
 
 # prepare C.3 metadata and role quotes; retain the intentional differences
 # between languages
+# prepare project metadata and the single editable contribution per language
 cva_prepare_project <- function(row, lang) {
   req <- function(key) cva_required(row, key)
-  loc <- function(key, mandatory = FALSE) {
-    cva_localized(row, key, lang, mandatory)
-  }
-  current <- if (lang == "es") "actualidad" else "present"
-
+  loc <- function(key) cva_localized(row, key, lang, TRUE)
+  es <- lang == "es"
   reference <- cva_text(row$referencia)
-  pi_label <- loc("etiqueta_ip")
-  if (!nzchar(pi_label)) {
-    pi_label <- if (lang == "en") "PI" else "IP"
-  }
-  pi_names <- cva_split_names(req("ip"))
-  pi_display <- if (length(pi_names) == 1L) {
-    pi_names
+  title <- sub("[.]$", "", loc("titulo"))
+  direction <- cva_text(row[[paste0("direccion_", lang)]])
+  period <- if (identical(row$inicio, row$fin)) {
+    cva_period_date(row$inicio)
   } else {
-    paste0(
-      paste(head(pi_names, -1L), collapse = ", "),
-      if (lang == "en") " and " else " y ",
-      tail(pi_names, 1L)
+    paste(
+      cva_period_date(row$inicio),
+      if (nzchar(row$fin)) {
+        cva_period_date(row$fin)
+      } else if (es) {
+        "actualidad"
+      } else {
+        "present"
+      },
+      sep = if (es) " – " else "–"
     )
   }
-  pi_institution <- cva_text(row$institucion_ip)
-  host <- cva_text(row$anfitrion)
-  # distinguish cash funding from the estimated value of awarded facility access
   amount_type <- cva_text(row$tipo_importe)
   if (!nzchar(amount_type)) {
     amount_type <- "financiacion_total"
@@ -1318,225 +1475,63 @@ cva_prepare_project <- function(row, lang) {
   if (!amount_type %in% c("financiacion_total", "valor_acceso_estimado")) {
     cva_error(row$context, ": tipo_importe desconocido.")
   }
-  amount_label <- if (amount_type == "valor_acceso_estimado") {
-    if (lang == "en") {
-      "Estimated value of awarded access and analytical services: "
-    } else {
-      "Valor estimado del acceso y los servicios analíticos concedidos: "
-    }
-  } else {
-    if (lang == "en") "Total funding: " else "Financiación total: "
-  }
   amount <- cva_number(row$importe, paste0(row$context, ": importe"))
-  # defer currency validation until the same point in each language's formatter
-  format_amount <- function() {
-    cva_amount(
-      row,
-      lang,
-      digits = if (amount == floor(amount)) 0L else 2L,
-      symbols = TRUE
-    )
-  }
-  period <- if (identical(row$inicio, row$fin)) {
-    cva_period_date(row$inicio)
-  } else {
-    paste(
-      cva_period_date(row$inicio),
-      if (nzchar(row$fin)) cva_period_date(row$fin) else current,
-      sep = " – "
-    )
-  }
-  # retain the Spanish metadata, status and translated role/contribution fields
-  if (lang == "es") {
-    title <- sub("[.]$", "", req("titulo"))
-    details <- cva_project_details(
-      c(
-        if (nzchar(reference)) paste0("Ref. ", reference),
-        req("financiador"),
-        cva_text(row$convocatoria),
-        paste0(
-          pi_label,
-          ": ",
-          pi_display,
-          if (nzchar(pi_institution)) {
-            paste0(" (", pi_institution, ")")
-          } else {
-            ""
-          }
-        ),
-        if (nzchar(host)) {
-          paste0("Centro de acogida: ", host)
-        }
-      ),
-      period,
-      c(
-        paste0(
-          amount_label,
-          format_amount()
-        ),
-        loc("estado", TRUE)
+  value <- cva_amount(
+    row,
+    lang,
+    digits = if (amount == floor(amount)) 0L else 2L,
+    symbols = TRUE
+  )
+  access <- cva_text(row$acceso)
+  award <- if (amount_type == "valor_acceso_estimado") {
+    if (es) {
+      paste0(
+        "Valor estimado del acceso y los servicios analíticos concedidos: ",
+        value
       )
-    )
-    role <- sub("[.]$", "", loc("rol", TRUE))
-    if (nzchar(cva_text(row$participacion_meses))) {
-      role <- paste0(
-        role,
-        " durante ",
-        cva_duration(
-          "",
-          "",
-          as_of = "",
-          lang = lang,
-          override = row$participacion_meses
-        )
+    } else if (nzchar(access)) {
+      paste0(
+        "Awarded access to ",
+        access,
+        " facilities and analytical services for an estimated total value of ",
+        value
+      )
+    } else {
+      paste0(
+        "Estimated value of awarded access and analytical services: ",
+        value
       )
     }
-    details <- paste0(sub("[.]$", "", details), ".")
-    role <- paste0(
-      sub("[.]$", "", cva_sentences(c(role, loc("contribucion")))),
-      "."
-    )
-    detail <- list(
+  } else {
+    paste0(if (es) "Financiación total: " else "Total funding: ", value)
+  }
+  # keep the PI/host wording in each direction field
+  # exactly as it should appear
+  programme <- if (es) {
+    c(req("financiador"), cva_text(row$convocatoria))
+  } else {
+    parts <- c(cva_text(row$convocatoria), req("financiador"))
+    paste(parts[nzchar(parts)], collapse = ", ")
+  }
+  details <- cva_project_details(
+    c(if (nzchar(reference)) paste0("Ref. ", reference), programme, direction),
+    period,
+    c(award, if (es) cva_text(row$estado))
+  )
+  details <- paste0(sub("[.]$", "", details), ".")
+  role <- paste0(sub("[.]$", "", loc("contribucion")), ".")
+  list(
+    entry = paste0(title, ". ", details, "\n", role),
+    detail = list(
       titulo = paste0(title, "."),
       detalles = details,
       periodo = period,
       papel = role
     )
-    entry <- paste0(title, ". ", details, "\n", role)
-  }
-  # retain the compact English metadata and its independently editable role text
-  if (lang == "en") {
-    title <- cva_text(row$titulo_cva_en)
-    if (!nzchar(title)) {
-      title <- req("titulo")
-    }
-    title <- sub("[.]$", "", title)
-    institution <- cva_text(row$institucion_ip_en)
-    if (!nzchar(institution)) {
-      institution <- pi_institution
-    }
-    own_lead <- grepl(
-      "principal investigator|project lead",
-      tolower(loc("rol", TRUE))
-    )
-    leader <- if (!own_lead) {
-      paste0(
-        pi_label,
-        ": ",
-        pi_display,
-        if (nzchar(institution)) paste0(" (", institution, ")") else ""
-      )
-    } else {
-      ""
-    }
-    host_details <- if (nzchar(host)) {
-      paste0(
-        pi_label,
-        ": ",
-        pi_display,
-        " (Host: ",
-        host,
-        ")"
-      )
-    } else {
-      ""
-    }
-    facilities <- cva_text(row$infraestructuras)
-    compact_period <- gsub(" – ", "–", period, fixed = TRUE)
-    programme <- c(cva_text(row$convocatoria), req("financiador"))
-    award_value <- format_amount()
-    parts <- c(
-      if (nzchar(reference)) paste0("Ref. ", reference),
-      paste(programme[nzchar(programme)], collapse = ", "),
-      if (nzchar(host_details)) host_details else leader
-    )
-    details <- cva_project_details(
-      parts,
-      compact_period,
-      if (amount_type == "valor_acceso_estimado" && nzchar(facilities)) {
-        paste0(
-          "Awarded access to ",
-          facilities,
-          " facilities and analytical services for an estimated total value of ",
-          award_value
-        )
-      } else {
-        paste0(amount_label, award_value)
-      }
-    )
-    role <- cva_text(row$rol_cva_en)
-    if (!nzchar(role)) {
-      role <- loc("rol", TRUE)
-    }
-    role <- sub("[.]$", "", role)
-    if (nzchar(cva_text(row$participacion_meses))) {
-      role <- paste0(
-        role,
-        " for ",
-        cva_duration(
-          "",
-          "",
-          as_of = "",
-          lang = lang,
-          override = row$participacion_meses
-        )
-      )
-    }
-    detail <- list(
-      titulo = paste0(title, "."),
-      detalles = paste0(details, "."),
-      periodo = gsub(" – ", "–", period, fixed = TRUE),
-      papel = paste0(role, ".")
-    )
-    entry <- paste0(title, ". ", details, ".\n", role, ".")
-  }
-  list(entry = entry, detail = detail)
+  )
 }
 
-# prepare structured C.4 records used when no narrative text is supplied
-cva_prepare_transfer <- function(row, lang) {
-  req <- function(key) cva_required(row, key)
-  loc <- function(key, mandatory = FALSE) {
-    cva_localized(row, key, lang, mandatory)
-  }
-
-  kind <- req("tipo")
-  if (!kind %in% c("contrato", "patente", "otro")) {
-    cva_error(row$context, ": tipo de transferencia desconocido.")
-  }
-  parts <- c(req("autores"), req("referencia"), req("titulo"), row$fecha)
-  if (kind == "otro") {
-    parts <- c(
-      req("autores"),
-      paste(rev(strsplit(row$fecha, "-", fixed = TRUE)[[1]]), collapse = "/"),
-      req("titulo"),
-      req("referencia")
-    )
-  }
-  if (kind == "patente") {
-    parts <- c(
-      parts,
-      req("paises_prioridad"),
-      req("titular"),
-      loc("explotacion", TRUE),
-      cva_text(row$empresas)
-    )
-  }
-  if (kind == "contrato") {
-    parts <- c(
-      parts,
-      req("entidad"),
-      paste0("IP: ", req("ip"), " (", req("institucion_ip"), ")"),
-      req("fin"),
-      cva_amount(row, lang)
-    )
-  }
-  entry <- cva_sentences(c(parts, loc("descripcion", TRUE)))
-  list(entry = entry)
-}
-
-# assemble the document in workbook order; publication aliases also style
-# conference authors
+# assemble the document from the five editable contribution tables
 cva_prepare <- function(
   tables,
   lang,
@@ -1545,7 +1540,7 @@ cva_prepare <- function(
   root = cva_root,
   render_date = cva_today()
 ) {
-  result <- cva_prepare_header(tables, lang, demo, draft, render_date)
+  result <- cva_prepare_header(tables, lang, demo, draft, render_date, root)
   profile <- result$perfil
   missing <- unlist(result$campos_pendientes, use.names = FALSE)
   label <- if (lang == "es") "[Pendiente]" else "[To complete]"
@@ -1561,8 +1556,7 @@ cva_prepare <- function(
     "Formacion",
     "Publicaciones",
     "Congresos",
-    "Proyectos",
-    "Transferencia"
+    "Proyectos"
   )) {
     entries <- list()
     for (row in cva_selected(tables, name)) {
@@ -1578,8 +1572,7 @@ cva_prepare <- function(
         Formacion = cva_prepare_education(row, lang),
         Publicaciones = cva_prepare_publication(row, lang, applicant_authors),
         Congresos = cva_prepare_conference(row, lang, applicant_authors),
-        Proyectos = cva_prepare_project(row, lang),
-        Transferencia = cva_prepare_transfer(row, lang)
+        Proyectos = cva_prepare_project(row, lang)
       )
       entries[[length(entries) + 1L]] <- prepared$entry
       if (!is.null(prepared$detail)) {
@@ -1598,7 +1591,11 @@ cva_prepare <- function(
 }
 
 # check page limits, A4 size, file size and the existing font/size rules
-cva_check_pdf <- function(filename, max_pages = 4L) {
+cva_check_pdf <- function(
+  filename,
+  max_pages = 4L,
+  code_fragments = character()
+) {
   info <- pdftools::pdf_info(filename)
   if (info$pages < 1L || info$pages > max_pages) {
     cva_error(
@@ -1629,17 +1626,33 @@ cva_check_pdf <- function(filename, max_pages = 4L) {
   # sizes
   boxes <- pdftools::pdf_data(filename, font_info = TRUE)
   for (page in boxes) {
-    # consolas is reserved for the literal code fragment in the seminar title
+    # validate explicit Markdown code and the existing seminar title fragment
     code <- grepl("Consolas", page$font_name)
+    declared <- unique(unlist(strsplit(
+      as.character(code_fragments),
+      "[[:space:]]+"
+    )))
+    allowed_code <- c("Theory", "<", "data", "Theory < data", declared)
+    # pdf words can include adjacent punctuation from the surrounding prose
+    core <- function(text) gsub("^[[:punct:]]+|[[:punct:]]+$", "", text)
+    allowed_core <- core(allowed_code)
+    allowed_core <- allowed_core[nzchar(allowed_core)]
+    known_code <- trimws(page$text) %in%
+      allowed_code |
+      core(trimws(page$text)) %in% allowed_core
     if (
       any(
-        code & !trimws(page$text) %in% c("Theory", "<", "data", "Theory < data")
+        code & !known_code
       )
     ) {
-      cva_error("Consolas solo se permite en el fragmento Theory < data.")
+      cva_error(
+        "Consolas solo se permite en los fragmentos de código declarados."
+      )
     }
     ordinal <- trimws(page$text) %in% c("st", "nd", "rd", "th")
-    minimum_size <- ifelse(code, 10.49, ifelse(ordinal, 8.24, 10.99))
+    seminar_code <- code &
+      trimws(page$text) %in% c("Theory", "<", "data", "Theory < data")
+    minimum_size <- ifelse(seminar_code, 10.49, ifelse(ordinal, 8.24, 10.99))
     if (any(page$font_size < minimum_size & nzchar(trimws(page$text)))) {
       cva_error("El PDF contiene texto menor del tamaño mínimo establecido.")
     }
@@ -1701,22 +1714,7 @@ cva_compile_pdf <- function(
     pretty = TRUE,
     null = "null"
   )
-  pdf <- file.path(
-    temporary,
-    paste0(
-      "cva",
-      if (borrador) {
-        "-borrador"
-      } else if (ejemplo) {
-        "-ejemplo"
-      } else {
-        ""
-      },
-      "-",
-      lang,
-      ".pdf"
-    )
-  )
+  pdf <- file.path(temporary, paste0("cva-", lang, ".pdf"))
   relative <- basename(json)
   log <- file.path(temporary, paste0(lang, ".log"))
   status <- system2(
@@ -1742,7 +1740,7 @@ cva_compile_pdf <- function(
 
 # coordinate validation, temporary compilation and copying of finished PDFs
 generar_cva <- function(
-  excel = file.path(cva_root, "data/datos-cv.xlsx"),
+  excel = file.path(cva_root, "input/datos-cv.xlsx"),
   idioma = "ambos",
   borrador = FALSE,
   comprobar = FALSE,
@@ -1800,7 +1798,8 @@ generar_cva <- function(
     )
     results[[lang]] <- cva_check_pdf(
       pdf,
-      max_pages = if (prueba_maquetacion) Inf else 4L
+      max_pages = if (prueba_maquetacion) Inf else 4L,
+      code_fragments = documents[[lang]]$codigo_markdown
     )
   }
   # publish only the finished, validated PDFs and report their size and page

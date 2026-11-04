@@ -1,61 +1,80 @@
 # CV
 
-Shared CV data and assets, with the AEI CVA workflow in `cva/`.
+The CVA uses one workbook for structured information and two Markdown files for narrative text.
 
-## Files
+## Edit the inputs
 
-- `data/datos-cv.xlsx`: the single source of CV data, including both languages and all auxiliary sheets.
-- `cva/cva.R`: reads and validates Excel, prepares the content and builds the PDFs.
-- `cva/cva.typ`: document layout.
-- `assets/`: the original SVG logos and a 606 × 192 px PNG ministry logo used in the header at 44.1 mm (about 350 dpi). The AEI logo remains SVG. The PNG was rasterised through Typst and R; keep the original ministry SVG as its source.
-- `cva/pdf/`: generated English and Spanish CVAs, included in version control.
+Everything you edit is in `input/`:
 
-## Requirements
+- `datos-cv.xlsx`: personal details, appointments, education, publications, conferences, projects and other CV material
+- `en.md`: English text for Part B and C.4
+- `es.md`: Spanish text for Part B and C.4
 
-Install R, the Typst CLI and Times New Roman. Install these R packages once in your normal user library:
+The workbook has seven plain sheets. Headers are bold, gridlines are visible, and there are no coloured backgrounds, spacer rows or verification columns.
+
+| Sheet | Content |
+| --- | --- |
+| Perfil | Personal details and current position |
+| Experiencia | Previous appointments |
+| Formacion | Degrees |
+| Publicaciones | Published work and manuscripts |
+| Congresos | Presentations, seminars and committee roles |
+| Proyectos | Project details and your contribution |
+| Otros | Visits, teaching, supervision, service, grants and other merits |
+
+In `Perfil`, enter the shared or Spanish value in `valor`. Use `ingles` only when the English version differs. Leave `fecha_cva` as `auto` or blank to use the render date in Europe/Madrid; a full date (`YYYY-MM-DD`) overrides it. `duracion_meses` sets the displayed duration of your current position.
+
+In the other CVA sheets, `incluir` accepts `SI` or `NO`; blank means `SI`. Manuscripts are initially excluded. Rows are sorted by date; their sheet order resolves ties.
+
+Dates accept `YYYY`, `YYYY-MM` or `YYYY-MM-DD`. Keep the precision you know. Author lists use `Surname, Given names; Surname, Given names`. `posicion_autor` gives your position; `correspondencia` names the corresponding authors exactly as in the list. The total author count is calculated automatically. `autores_iniciales` optionally changes how many leading authors are shown; blank uses three.
+
+Publication quotes are in `contribucion_es` and `contribucion_en`. The same two columns in `Proyectos` contain the complete project contribution, including any participation duration you want to mention. `direccion_es` and `direccion_en` contain the PI/host wording as it should appear. `tipo_importe` distinguishes `financiacion_total` from `valor_acceso_estimado`; keep the original currency. `acceso` identifies the facilities covered by an access award.
+
+In conference titles, backticks mark the existing `Theory < data` fragment.
+
+## Edit the narrative text
+
+Keep the two section headings in each Markdown file:
+
+```markdown
+# Part B
+
+**Scientific profile:** Write the summary here.
+
+Another paragraph, with *italics* or a [link](https://example.org).
+
+# C.4
+
+Write the knowledge-transfer section here.
+```
+
+Each paragraph occupies one physical line. Put a blank line between paragraphs; use your editor's visual word wrapping for comfortable reading.
+
+Bold, italics, links and inline code are rendered from Markdown. The section headings select the destination and are not printed. Part B is limited to 5,000 visible characters per language, including spaces and paragraph breaks; Markdown markers and link destinations are excluded from that count.
+
+## Render the CVA
+
+Install R, the Typst CLI and Times New Roman. Install the R packages once in your normal user library:
 
 ```r
-install.packages(c("readxl", "jsonlite", "xml2", "pdftools"))
+install.packages(c("readxl", "jsonlite", "xml2", "pdftools", "commonmark"))
 ```
 
-## Update and build
-
-Edit `data/datos-cv.xlsx`, save it, then run from this directory:
+From the repository directory:
 
 ```sh
-Rscript cva/cva.R --draft
+Rscript cva/cva.R
 ```
 
-This updates `cva/pdf/cva-borrador-en.pdf` and `cva/pdf/cva-borrador-es.pdf`. Use `--idioma en` or `--idioma es` for one language, or `--check` to validate the data without building. Omit `--draft` when the profile fields are complete.
+This updates `cva/pdf/cva-en.pdf` and `cva/pdf/cva-es.pdf`. Use `--idioma en` or `--idioma es` for one language, or `--check` to validate the inputs without rendering.
 
-The current layout test uses a 5,000-character placeholder in Part B. Explanations in C.1 and C.3 vary in length according to the contribution. To render a layout test without enforcing the page limit, use:
-
-```sh
-Rscript cva/cva.R --draft --layout-test
-```
-
-In R, use `generar_cva(borrador = TRUE, prueba_maquetacion = TRUE)`. The explicit `--layout-test` option requires `--draft` and relaxes only the four-page check; normal builds retain that limit. Replace or shorten the placeholder before preparing the submission.
-
-From an R session in this directory:
+From an R session:
 
 ```r
 source("cva/cva.R", encoding = "UTF-8")
-generar_cva(borrador = TRUE)
+generar_cva()
 ```
 
-From the `cva/` directory, use `Rscript cva.R --draft` or `source("cva.R", encoding = "UTF-8")`; shared inputs and output paths are resolved automatically.
+From the `cva/` directory, use `Rscript cva.R` or `source("cva.R", encoding = "UTF-8")`. Paths to the workbook, Markdown and assets are resolved from the repository automatically.
 
-## Data conventions
-
-- Keep sheet names, headers and record IDs. `incluir_cva` selects entries with `SI` / `NO`; entries are sorted by date automatically.
-- Shared values stay in common columns. Translations use `_es` / `_en`; in `Perfil`, use either `valor` or the `es` / `en` cells.
-- Dates accept `YYYY`, `YYYY-MM` or `YYYY-MM-DD`. Do not invent missing days or months.
-- The CVA date is automatic by default: in `Perfil`, leave `fecha_cva` blank or set its `valor` cell to `auto`. Each build uses the current date in Europe/Madrid for both languages. To override it, enter a full date (`YYYY-MM-DD`) in that cell; restore `auto` to return to the automatic date.
-- Keep full author lists in order, separated by semicolons. `posicion_autor` is your position; `correspondencia` uses exact names from that list. R generates the compact author-position text.
-- Publication explanations are edited in `contribucion_es` / `contribucion_en` and appear in quote blocks.
-- `Proyectos.tipo_importe` distinguishes `financiacion_total` from `valor_acceso_estimado`. Keep the original currency. `participacion_meses` records your participation separately from project dates.
-- `Perfil.duracion_meses` overrides the calculated appointment duration. `nota_fecha_inicio` contains the bilingual parental-leave note.
-- Part B is edited in `Textos`, row `resumen`, with a limit of 5,000 characters per language, including spaces and paragraph breaks. Its current text is a placeholder of exactly 5,000 characters in each language. A short label followed by `: ` at the beginning of a paragraph renders in bold without adding markup to the character count. Separate paragraphs with a blank line.
-- C.4 is edited in `Textos`, row `transferencia`. Both narrative sections use an 11 pt gap between paragraphs.
-
-The build validates the A4 format, four-page / 4 MB limits, permitted fonts and minimum 11 pt text. Intermediate JSON, logs and compilation files are created in the operating system's temporary directory and removed automatically. No project snapshots or package caches are stored in this repository.
+The build checks dates, translations, authorship, the Part B character limit, A4 size, the four-page and 4 MB limits, and the established font rules. Compilation files are created in the operating system's temporary directory and removed after the build. Format R code with `air`.

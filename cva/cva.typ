@@ -1,12 +1,12 @@
-// CVA layout adapted from Carlos Perez Carmona's JdC CVA, supplied 2 November 2026.
-// Header artwork was supplied by the applicant; the ministry logo uses a PNG rasterisation.
-// The applicant's concise labels and content are retained.
-// Workbook strings remain literal data and are never evaluated as Typst code.
+// define the CVA layout and typography
+// header artwork was supplied by the applicant; the ministry logo uses a PNG
+// rasterisation
+// the applicant's concise labels and content are retained
+// workbook strings remain literal data and are never evaluated as Typst code
 #let cv = json(sys.inputs.at("data"))
 #let es = cv.idioma == "es"
 #let tr(a, b) = if es { a } else { b }
 #let p = cv.perfil
-#let draft = cv.at("borrador", default: false)
 #set document(
   title: tr("Curriculum vitae abreviado", "Abbreviated curriculum vitae"),
   author: p.nombre + " " + p.apellidos,
@@ -26,9 +26,7 @@
     grid(
       columns: (1fr, 1fr, 1fr),
       align: (left, center, right),
-      [],
-      if counter(page).get().first() > 1 { counter(page).display() } else { [] },
-      [],
+      [], if counter(page).get().first() > 1 { counter(page).display() } else { [] }, [],
     )
   },
 )
@@ -44,7 +42,12 @@
 #let grid-table(columns, ..cells) = block(above: 0pt, below: 0pt)[
   #set align(left)
   #set par(leading: 0.4em, spacing: 0pt, justify: false)
-  #table(columns: columns, align: left + horizon, inset: (left: 5pt, right: 3pt, top: 2.5pt, bottom: 2.5pt), stroke: 0.4pt, ..cells.pos())
+  #table(columns: columns, align: left + horizon, inset: (
+      left: 5pt,
+      right: 3pt,
+      top: 2.5pt,
+      bottom: 2.5pt,
+    ), stroke: 0.4pt, ..cells.pos())
 ]
 #let label-fill = rgb("D8D8D8")
 #let label(body) = table.cell(fill: label-fill)[#body]
@@ -57,13 +60,32 @@
   let body = if label == none { target } else { label }
   if accent { text(fill: blue)[#underline(link(target, body))] } else { link(target, body) }
 }
+// render literal Markdown nodes without evaluating their contents as Typst code
+#let markdown-inline(nodes) = {
+  for node in nodes {
+    if node.type == "text" {
+      node.text
+    } else if node.type == "strong" {
+      strong(markdown-inline(node.children))
+    } else if node.type == "emph" {
+      emph(markdown-inline(node.children))
+    } else if node.type == "link" {
+      hyperlink(node.destination, label: markdown-inline(node.children))
+    } else if node.type == "code" {
+      text(font: "Consolas", size: 11pt, node.text)
+    } else if node.type == "linebreak" {
+      linebreak()
+    }
+  }
+}
+
 #let web-link(value) = if value.starts-with("https://") or value.starts-with("http://") {
   hyperlink(value, accent: false)
 } else {
   value
 }
-// Department links apply only to the institution names in A.1 and A.2.
-// Original department pages are retained where no translated page was found.
+// department links apply only to the institution names in A.1 and A.2
+// original department pages are retained where no translated page was found
 #let institution-pages = (
   "Basque Centre for Climate Change (BC3)": tr(
     "https://www.bc3research.org/es/investigacion/investigacion/ecosistemas-terrestres/",
@@ -111,8 +133,6 @@
       spacing: entry-gap,
       ..entries.map(entry => prose(entry, breakable: entry.len() > 1500)),
     )
-  } else if draft {
-    prose(tr("Pendiente de completar y seleccionar aportaciones.", "Contributions to be completed and selected."))
   }
 }
 #let publication-context(body) = block(width: 100%, above: prose-leading, below: 0pt)[#layout(size => {
@@ -153,7 +173,9 @@
     columns: (91mm, 69mm),
     align: left + horizon,
     strong(tr("Parte A. DATOS PERSONALES", "Part A. PERSONAL INFORMATION")),
-    grid-table((26mm, 43mm), label(strong(tr("Fecha CVA", "CVA date"))), table.cell(align: center + horizon)[#display-date(
+    grid-table((26mm, 43mm), label(strong(tr("Fecha CVA", "CVA date"))), table.cell(
+      align: center + horizon,
+    )[#display-date(
       p.fecha_cva,
     )]),
   )
@@ -190,7 +212,6 @@
   table.cell(colspan: 3)[#{
     let note = p.at("nota_fecha_inicio", default: "")
     display-date(p.fecha_inicio) + " (" + cv.duracion_actual + (if note != "" { "*" } else { "" }) + ")"
-
   }],
   label(tr("Institución", "Institution")),
   table.cell(colspan: 3)[#linked-institution(p.institucion)],
@@ -221,7 +242,9 @@
     .experiencia
     .map(r => (
       table.cell(align: left + horizon)[#r.periodo (#r.duracion)],
-      table.cell(align: left + horizon)[#r.puesto#if r.tipo == "puesto" { [#(" / ")#linked-institution(r.institucion)#(" / " + r.pais)] }#if (
+      table.cell(align: left + horizon)[#r.puesto#if r.tipo == "puesto" {
+          [#" / "#linked-institution(r.institucion)#(" / " + r.pais)]
+        }#if (
           r.interrupcion != ""
         ) {
           [. #r.interrupcion]
@@ -240,15 +263,8 @@
   ..cv.formacion.map(r => (r.titulo, r.universidad, table.cell(align: center + horizon)[#r.anio])).flatten(),
 )
 #section(tr("Parte B. RESUMEN DEL CV", "Part B. CV SUMMARY"))
-#for paragraph in cv.resumen.split("\n\n") {
-  prose(below: narrative-paragraph-gap)[
-    #let parts = paragraph.split(": ")
-    #if parts.len() > 1 and parts.first().len() < 70 {
-      [#strong(parts.first() + ":") #parts.slice(1).join(": ")]
-    } else {
-      paragraph
-    }
-  ]
+#for paragraph in cv.resumen_parrafos {
+  prose(below: narrative-paragraph-gap)[#markdown-inline(paragraph)]
 }
 #section(tr("Parte C. MÉRITOS RELEVANTES", "Part C. RELEVANT MERITS"))
 #set par(leading: prose-leading, spacing: prose-leading, justify: true)
@@ -336,15 +352,6 @@
   "C.4. Transferencia de conocimiento y tecnología",
   "C.4. Knowledge and technology transfer",
 ))
-#show regex("https://doi[.]org/10[.][0-9]+/[A-Za-z0-9._/-]*[A-Za-z0-9]"): it => hyperlink(
-  it.text, label: it.text.replace("https://doi.org/", "doi: "),
-)
-#show "Granjel RR": strong
-#let transfer-narrative = cv.at("transferencia_narrativa", default: "")
-#if transfer-narrative != "" {
-  for paragraph in transfer-narrative.split("\n\n") {
-    prose(paragraph, below: narrative-paragraph-gap)
-  }
-} else {
-  contribution-list(cv.transferencia)
+#for paragraph in cv.transferencia_parrafos {
+  prose(below: narrative-paragraph-gap)[#markdown-inline(paragraph)]
 }
