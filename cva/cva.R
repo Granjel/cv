@@ -79,7 +79,9 @@ cva_schema <- list(
       "pais_en",
       "duracion_meses",
       "nota",
-      "note"
+      "note",
+      "url_es",
+      "url_en"
     )
   ),
   Formacion = list(
@@ -146,15 +148,17 @@ cva_schema <- list(
       "importe",
       "moneda",
       "tipo_importe",
-      "instalaciones",
       "estado",
+      "status",
+      "detalle_importe_es",
+      "detalle_importe_en",
       "contribucion_es",
       "contribucion_en"
     )
   )
 )
 
-# list the personal fields required by Part A
+# list the personal and authorship fields required by the CVA
 # appointment information comes from Experiencia
 cva_profile_keys <- c(
   "fecha_cva",
@@ -167,7 +171,8 @@ cva_profile_keys <- c(
   "web",
   "orcid",
   "telefono",
-  "palabras_clave"
+  "palabras_clave",
+  "alias_autoria"
 )
 
 # report validation failures without exposing an internal R call stack
@@ -234,6 +239,7 @@ cva_localized <- function(row, key, lang, mandatory = FALSE) {
     institucion = c(es = "institucion", en = "institution"),
     direccion = c(es = "direccion", en = "address"),
     nota = c(es = "nota", en = "note"),
+    estado = c(es = "estado", en = "status"),
     c(es = paste0(key, "_es"), en = paste0(key, "_en"))
   )
   value <- cva_text(row[[fields[[lang]]]])
@@ -241,6 +247,17 @@ cva_localized <- function(row, key, lang, mandatory = FALSE) {
   other <- cva_text(row[[fields[[other_lang]]]])
   if (!nzchar(value) && (mandatory || nzchar(other))) {
     cva_error(row$context, ": falta la traducción ", fields[[lang]], ".")
+  }
+  value
+}
+
+# read an optional department URL for this row and language
+# a blank cell deliberately leaves the institution unlinked
+cva_institution_url <- function(row, lang) {
+  key <- paste0("url_", lang)
+  value <- cva_text(row[[key]])
+  if (nzchar(value) && !grepl("^https?://[^[:space:]]+$", value)) {
+    cva_error(row$context, ": URL no válida en ", key, ".")
   }
   value
 }
@@ -342,14 +359,18 @@ cva_sentences <- function(parts) {
   result
 }
 
-# use a semicolon before project years and a period before award details
-cva_project_details <- function(before, period, after) {
-  paste0(
-    sub("[.]$", "", cva_sentences(before)),
-    "; ",
-    period,
-    ". ",
-    cva_sentences(after)
+# identify the date component without boxing matching text elsewhere
+cva_project_segments <- function(before, period, after) {
+  list(
+    list(
+      text = paste0(sub("[.]$", "", cva_sentences(before)), "; "),
+      style = "plain"
+    ),
+    list(text = period, style = "nowrap"),
+    list(
+      text = paste0(". ", sub("[.]$", "", cva_sentences(after)), "."),
+      style = "plain"
+    )
   )
 }
 
@@ -367,22 +388,6 @@ cva_import_row <- function(row, name, index, count) {
       tolower(cva_text(row$fin)) %in% c("actualmente", "actualidad", "present")
   ) {
     row$fin <- ""
-  }
-  if (name == "Congresos") {
-    # backticks mark the existing inline code fragment directly in the title
-    title <- cva_text(row$titulo)
-    spans <- regmatches(title, gregexpr("`[^`]+`", title))[[1]]
-    if (length(spans) > 1L) {
-      cva_error(
-        row$context,
-        ": usa un solo fragmento entre backticks en el título."
-      )
-    }
-    row$titulo_codigo <- ""
-    if (length(spans)) {
-      row$titulo_codigo <- substring(spans, 2L, nchar(spans) - 1L)
-      row$titulo <- sub(spans, row$titulo_codigo, title, fixed = TRUE)
-    }
   }
   row
 }
@@ -564,27 +569,22 @@ cva_authors <- function(row) {
   if (!all(corresponding %in% names)) {
     cva_error(row$context, ": autor de correspondencia ausente de autores.")
   }
-  format_authors <- function(leading) {
-    indices <- sort(unique(c(
-      seq_len(leading),
-      position,
-      match(corresponding, names),
-      length(names)
-    )))
-    shown <- character()
-    previous <- 0L
-    for (index in indices) {
-      if (index > previous + 1L) {
-        shown <- c(shown, "…")
-      }
-      shown <- c(shown, display[[index]])
-      previous <- index
+  indices <- sort(unique(c(
+    1:2,
+    position,
+    match(corresponding, names),
+    length(names)
+  )))
+  shown <- character()
+  previous <- 0L
+  for (index in indices) {
+    if (index > previous + 1L) {
+      shown <- c(shown, "…")
     }
-    paste(shown, collapse = "; ")
+    shown <- c(shown, display[[index]])
+    previous <- index
   }
-  # keep three leading names when the abbreviated citation fits 70 characters
-  shown <- format_authors(3L)
-  if (nchar(shown, type = "chars") > 70L) format_authors(2L) else shown
+  paste(shown, collapse = "; ")
 }
 
 # state corresponding authorship and the applicant's position for the quote
@@ -632,12 +632,15 @@ cva_citation_segments <- function(
   own_authors,
   venue_index,
   separators = NULL,
-  keep_together = integer(),
-  inline_code = ""
+  keep_together = integer()
 ) {
   # treat titles as literal data
   # format initials and style applicant and venue
-  own_authors <- vapply(own_authors, cva_short_author, character(1))
+  own_authors <- cva_author_key(vapply(
+    own_authors,
+    cva_short_author,
+    character(1)
+  ))
   segments <- list()
   add <- function(value, style = "plain") {
     if (nzchar(value)) {
@@ -669,13 +672,11 @@ cva_citation_segments <- function(
           add(", ")
         }
         author <- cva_short_author(trimws(authors[[i]]))
-        add(author, if (author %in% own_authors) "author" else "plain")
+        add(
+          author,
+          if (cva_author_key(author) %in% own_authors) "author" else "plain"
+        )
       }
-    } else if (index == 2L && nzchar(inline_code)) {
-      position <- regexpr(inline_code, value, fixed = TRUE)[[1]]
-      add(substr(value, 1L, position - 1L))
-      add(inline_code, "code")
-      add(substring(value, position + nchar(inline_code)))
     } else {
       add(value, if (index %in% keep_together) "nowrap" else "plain")
     }
@@ -976,17 +977,22 @@ cva_read_markdown <- function(filename) {
   result
 }
 
-# collect declared inline code so PDF font checks can validate its actual text
-cva_markdown_code <- function(nodes) {
+# collect explicit code from Markdown nodes and backticked workbook text
+# the same single-backtick convention is used by the Typst inline renderer
+cva_declared_code <- function(value) {
+  if (is.list(value)) {
+    if (identical(value$type, "code")) {
+      return(value$text)
+    }
+    return(unlist(lapply(value, cva_declared_code), use.names = FALSE))
+  }
+  if (!is.character(value)) {
+    return(character())
+  }
   unlist(
-    lapply(nodes, function(node) {
-      if (node$type == "code") {
-        return(node$text)
-      }
-      if (!is.null(node$children)) {
-        return(cva_markdown_code(node$children))
-      }
-      character()
+    lapply(value, function(text) {
+      spans <- regmatches(text, gregexpr("`[^`]+`", text))[[1]]
+      substring(spans, 2L, nchar(spans) - 1L)
     }),
     use.names = FALSE
   )
@@ -1033,6 +1039,7 @@ cva_prepare_header <- function(tables, current, lang, render_date, root) {
   profile$puesto <- cva_localized(current, "puesto", lang, TRUE)
   profile$fecha_inicio <- current$inicio
   profile$institucion <- cva_required(current, "institucion")
+  profile$url_institucion <- cva_institution_url(current, lang)
   profile$departamento <- cva_required(current, "departamento")
   profile$pais <- cva_localized(current, "pais", lang, TRUE)
   profile$nota_fecha_inicio <- cva_localized(current, "nota", lang)
@@ -1056,13 +1063,6 @@ cva_prepare_header <- function(tables, current, lang, render_date, root) {
     resumen_parrafos = narrative$resumen$paragraphs,
     transferencia_narrativa = narrative$transferencia$text,
     transferencia_parrafos = narrative$transferencia$paragraphs,
-    codigo_markdown = unlist(
-      lapply(
-        c(narrative$resumen$paragraphs, narrative$transferencia$paragraphs),
-        cva_markdown_code
-      ),
-      use.names = FALSE
-    ),
     duracion_actual = cva_duration(
       current$inicio,
       as_of = profile$fecha_cva,
@@ -1089,6 +1089,7 @@ cva_prepare_experience <- function(row, lang, as_of) {
     ),
     puesto = cva_localized(row, "puesto", lang, TRUE),
     institucion = cva_required(row, "institucion"),
+    url_institucion = cva_institution_url(row, lang),
     pais = cva_localized(row, "pais", lang, TRUE)
   )
 }
@@ -1112,8 +1113,7 @@ cva_prepare_education <- function(row, lang) {
   entry
 }
 
-# prepare C.1 citations and contribution quotes; return the applicant's author
-# aliases
+# prepare C.1 citations and contribution quotes from the complete author list
 cva_prepare_publication <- function(row, lang, applicant_authors) {
   req <- function(key) cva_required(row, key)
   loc <- function(key, mandatory = FALSE) {
@@ -1131,11 +1131,6 @@ cva_prepare_publication <- function(row, lang, applicant_authors) {
       ": autor de correspondencia ausente de autores."
     )
   }
-  applicant_authors <- unique(c(
-    applicant_authors,
-    own_author,
-    cva_short_author(own_author)
-  ))
   kind <- req("tipo")
   if (!kind %in% c("articulo", "libro", "capitulo", "datos", "software")) {
     cva_error(row$context, ": tipo de publicación desconocido.")
@@ -1167,7 +1162,7 @@ cva_prepare_publication <- function(row, lang, applicant_authors) {
   separators <- c("5" = " ", "6" = ", ")
   segments <- cva_citation_segments(
     citation,
-    own_author,
+    applicant_authors,
     4L,
     separators = separators
   )
@@ -1191,7 +1186,7 @@ cva_prepare_publication <- function(row, lang, applicant_authors) {
     segmentos = segments,
     doi = doi
   )
-  list(detail = detail, applicant_authors = applicant_authors)
+  list(detail = detail)
 }
 
 # prepare C.2 presentation or committee entries, including author and code-font
@@ -1201,8 +1196,6 @@ cva_prepare_conference <- function(row, lang, applicant_authors) {
   loc <- function(key, mandatory = FALSE) {
     cva_localized(row, key, lang, mandatory)
   }
-  es <- lang == "es"
-
   kind <- cva_text(row$tipo)
   if (!nzchar(kind)) {
     kind <- "presentacion"
@@ -1225,17 +1218,6 @@ cva_prepare_conference <- function(row, lang, applicant_authors) {
   } else {
     cva_text(row$titulo)
   }
-  code <- cva_text(row$titulo_codigo)
-  if (nzchar(code) && !grepl(code, title, fixed = TRUE)) {
-    cva_error(row$context, ": titulo_codigo no aparece en el título.")
-  }
-  mode_key <- tolower(mode)
-  prefix <- if (mode_key %in% c("poster", "póster")) {
-    if (es) "Presentación de póster" else "Poster presentation"
-  } else {
-    mode
-  }
-  conference_authors <- cva_split_names(authors)
   show_authors <- kind == "presentacion"
   place <- loc("lugar", TRUE)
   citation <- c(
@@ -1245,24 +1227,18 @@ cva_prepare_conference <- function(row, lang, applicant_authors) {
     place,
     cva_conference_date(row$fecha, lang)
   )
-  own_authors <- conference_authors[
-    cva_author_key(conference_authors) %in%
-      cva_author_key(applicant_authors)
-  ]
-  # preserve author emphasis, unbroken event/date fields and the literal code
-  # fragment
+  # use configured aliases for emphasis and keep only the date field unbroken
   segments <- cva_citation_segments(
     citation,
-    own_authors,
+    applicant_authors,
     3L,
     separators = c("2" = ". ", "4" = " (", "5" = "; "),
-    keep_together = 4:5,
-    inline_code = code
+    keep_together = 5L
   )
   segments <- c(segments, list(list(text = ").", style = "plain")))
   citation_text <- cva_citation_text(segments)
   detail <- list(
-    tipo = prefix,
+    tipo = mode,
     categoria = kind,
     autores_visibles = show_authors,
     cita = citation_text,
@@ -1335,58 +1311,31 @@ cva_prepare_project <- function(row, lang) {
     digits = if (amount == floor(amount)) 0L else 2L,
     symbols = TRUE
   )
-  facilities <- cva_split_names(cva_text(row$instalaciones))
-  access <- if (length(facilities) <= 1L) {
-    paste(facilities, collapse = "")
-  } else {
-    paste0(
-      paste(head(facilities, -1L), collapse = ", "),
-      if (es) " y " else " and ",
-      tail(facilities, 1L)
-    )
-  }
-  award <- if (amount_type == "estimado") {
-    if (nzchar(access)) {
-      paste0(
-        if (es) {
-          "Acceso concedido a las instalaciones de "
-        } else {
-          "Awarded access to "
-        },
-        access,
-        if (es) {
-          " y servicios analíticos por un valor total estimado de "
-        } else {
-          " facilities and analytical services for an estimated total value of "
-        },
-        value
-      )
+  # describe the numeric award neutrally and print only explicit extra details
+  award <- paste0(
+    if (amount_type == "estimado") {
+      if (es) "Valor estimado: " else "Estimated value: "
+    } else if (es) {
+      "Financiación total: "
     } else {
-      paste0(
-        if (es) {
-          "Valor estimado del acceso y los servicios analíticos concedidos: "
-        } else {
-          "Estimated value of awarded access and analytical services: "
-        },
-        value
-      )
-    }
-  } else {
-    paste0(if (es) "Financiación total: " else "Total funding: ", value)
-  }
-  programme <- if (es) {
-    c(loc("financiador"), call)
-  } else {
-    paste(call, loc("financiador"), sep = ", ")
-  }
-  details <- cva_project_details(
+      "Total funding: "
+    },
+    value
+  )
+  programme <- paste(call, loc("financiador"), sep = ", ")
+  segments <- cva_project_segments(
     c(if (nzchar(reference)) paste0("Ref. ", reference), programme, direction),
     period,
-    c(award, if (es) cva_text(row$estado))
+    c(
+      award,
+      cva_localized(row, "estado", lang),
+      cva_localized(row, "detalle_importe", lang)
+    )
   )
   list(
     titulo = paste0(title, "."),
-    detalles = paste0(sub("[.]$", "", details), "."),
+    detalles = paste0(sub("[.]$", "", cva_citation_text(segments)), "."),
+    segmentos = segments,
     periodo = period,
     papel = paste0(sub("[.]$", "", loc("contribucion")), ".")
   )
@@ -1427,10 +1376,7 @@ cva_prepare <- function(
     cva_prepare_education,
     lang = lang
   )
-  applicant_authors <- c(
-    paste(profile$apellidos, profile$nombre, sep = ", "),
-    paste(profile$nombre, profile$apellidos)
-  )
+  applicant_authors <- cva_split_names(profile$alias_autoria)
   for (name in c("Publicaciones", "Congresos", "Proyectos")) {
     details <- list()
     for (row in cva_selected(tables, name)) {
@@ -1441,12 +1387,10 @@ cva_prepare <- function(
         Proyectos = list(detail = cva_prepare_project(row, lang))
       )
       details[[length(details) + 1L]] <- prepared$detail
-      if (name == "Publicaciones") {
-        applicant_authors <- prepared$applicant_authors
-      }
     }
     result[[paste0(tolower(name), "_detalle")]] <- details
   }
+  result$codigo_declarado <- cva_declared_code(result)
   result
 }
 
@@ -1482,38 +1426,46 @@ cva_check_pdf <- function(
   ) {
     cva_error("El PDF contiene una fuente no admitida.")
   }
-  # allow only the established Consolas fragment and reduced ordinal suffix
-  # sizes
+  # validate code against declared input, with one font size in every section
+  # pdf words may join adjacent spans or split a span across wrapped lines
+  # compare literal substrings of the ordered, whitespace-free declarations
+  declared <- gsub("[[:space:]]+", "", paste(code_fragments, collapse = ""))
   boxes <- pdftools::pdf_data(filename, font_info = TRUE)
   for (page in boxes) {
-    # validate explicit Markdown code and the existing seminar title fragment
+    visible <- nzchar(trimws(page$text))
     code <- grepl("Consolas", page$font_name)
-    declared <- unique(unlist(strsplit(
-      as.character(code_fragments),
-      "[[:space:]]+"
-    )))
-    allowed_code <- c("Theory", "<", "data", "Theory < data", declared)
-    # pdf words can include adjacent punctuation from the surrounding prose
-    core <- function(text) gsub("^[[:punct:]]+|[[:punct:]]+$", "", text)
-    allowed_core <- core(allowed_code)
-    allowed_core <- allowed_core[nzchar(allowed_core)]
-    known_code <- trimws(page$text) %in%
-      allowed_code |
-      core(trimws(page$text)) %in% allowed_core
-    if (
-      any(
-        code & !known_code
-      )
-    ) {
-      cva_error(
-        "Consolas solo se permite en los fragmentos de código declarados."
-      )
+    known_code <- vapply(
+      page$text,
+      function(text) {
+        value <- gsub("[[:space:]]+", "", text)
+        nzchar(value) && grepl(value, declared, fixed = TRUE)
+      },
+      logical(1)
+    )
+    if (any(code & !known_code)) {
+      cva_error("Consolas solo se permite en fragmentos de código declarados.")
     }
-    ordinal <- trimws(page$text) %in% c("st", "nd", "rd", "th")
-    seminar_code <- code &
-      trimws(page$text) %in% c("Theory", "<", "data", "Theory < data")
-    minimum_size <- ifelse(seminar_code, 10.49, ifelse(ordinal, 8.24, 10.99))
-    if (any(page$font_size < minimum_size & nzchar(trimws(page$text)))) {
+    if (any(code & abs(page$font_size - 10.5) > 0.01)) {
+      cva_error("Los fragmentos de código deben usar Consolas de 10,5 pt.")
+    }
+    # accept a reduced ordinal suffix only beside a full-size numeral
+    # require the raised position, matching face and the shared 75% size
+    ordinal <- rep(FALSE, nrow(page))
+    candidates <- which(
+      !code &
+        grepl("^(st|nd|rd|th|er)$", page$text, ignore.case = TRUE) &
+        abs(page$font_size - 8.25) <= 0.01
+    )
+    for (index in candidates) {
+      numeral <- grepl("[0-9][.]?$", page$text) &
+        abs(page$font_size - 11) <= 0.01 &
+        page$font_name == page$font_name[[index]] &
+        abs(page$x + page$width - page$x[[index]]) <= 3 &
+        page$y > page$y[[index]] &
+        page$y - page$y[[index]] <= 6
+      ordinal[[index]] <- any(numeral)
+    }
+    if (any(visible & !code & !ordinal & page$font_size < 10.99)) {
       cva_error("El PDF contiene texto menor del tamaño mínimo establecido.")
     }
   }
@@ -1536,8 +1488,10 @@ cva_find_typst <- function(typst) {
   if (!nzchar(executable)) {
     cva_error("No se encuentra Typst. Indica su ruta con --typst.")
   }
-  if (!"Times New Roman" %in% system2(executable, "fonts", stdout = TRUE)) {
-    cva_error("No se encuentra la fuente Times New Roman.")
+  fonts <- system2(executable, "fonts", stdout = TRUE)
+  missing <- setdiff(c("Times New Roman", "Consolas"), fonts)
+  if (length(missing)) {
+    cva_error("No se encuentran las fuentes: ", paste(missing, collapse = ", "))
   }
   executable
 }
@@ -1648,7 +1602,7 @@ generar_cva <- function(
     )
     results[[lang]] <- cva_check_pdf(
       pdf,
-      code_fragments = documents[[lang]]$codigo_markdown
+      code_fragments = documents[[lang]]$codigo_declarado
     )
   }
   # publish only the finished, validated PDFs and report their size and page
