@@ -1,0 +1,1236 @@
+---
+title: "CVA internationalisation and research profile"
+format:
+  html:
+    embed-resources: true
+    toc: false
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  large_team_threshold: 100
+  collaborator_limit: 20
+---
+
+```{r}
+# read the generated statistics once without making online requests
+csv_candidates <- c(
+  file.path("..", "input", "stats.csv"),
+  file.path("input", "stats.csv")
+)
+csv_file <- csv_candidates[file.exists(csv_candidates)][1]
+if (is.na(csv_file)) {
+  stop("Run cva/stats.R before rendering this report.")
+}
+all_records <- read.csv(
+  csv_file,
+  stringsAsFactors = FALSE,
+  fileEncoding = "UTF-8",
+  check.names = FALSE,
+  colClasses = c(
+    country_code = "character",
+    reference_country = "character",
+    as_of_date = "character"
+  ),
+  na.strings = ""
+)
+common_required <- c("record_type", "as_of_date", "reference_country")
+if (!all(common_required %in% names(all_records)) || !nrow(all_records)) {
+  stop("The statistics CSV must contain typed records and reporting scope.")
+}
+if (any(!all_records$record_type %in% c("publication", "activity"))) {
+  stop("Unknown record_type in the statistics CSV.")
+}
+for (field in c("as_of_date", "reference_country")) {
+  values <- trimws(as.character(all_records[[field]]))
+  if (anyNA(values) || any(!nzchar(values)) || length(unique(values)) != 1L) {
+    stop(
+      "The statistics CSV must use one non-empty ",
+      field,
+      ". Run retrieve_stats()."
+    )
+  }
+}
+records <- all_records[
+  all_records$record_type %in% "publication",
+  ,
+  drop = FALSE
+]
+activities <- all_records[
+  all_records$record_type %in% "activity",
+  ,
+  drop = FALSE
+]
+as_of_date <- as.character(all_records$as_of_date[[1]])
+required <- c(
+  "paper_id",
+  "title",
+  "year",
+  "publication_type",
+  "journal",
+  "first_author",
+  "corresponding_author",
+  "author_count",
+  "metadata_author_count",
+  "metadata_author_count_matches",
+  "metadata_source",
+  "metadata_status",
+  "metadata_retrieved_at",
+  "citation_count",
+  "is_open_access",
+  "author_index",
+  "author_name",
+  "is_self",
+  "author_identity_status",
+  "coauthor_key",
+  "author_record_type",
+  "excluded_dois",
+  "institution_id",
+  "ror_id",
+  "institution_name",
+  "country_code",
+  "country",
+  "city",
+  "latitude",
+  "longitude",
+  "affiliation_status"
+)
+missing_columns <- setdiff(required, names(records))
+if (length(missing_columns)) {
+  stop(
+    "Publication fields missing from stats.csv: ",
+    paste(missing_columns, collapse = ", ")
+  )
+}
+if (!nrow(records)) {
+  stop("The statistics CSV contains no publication records.")
+}
+
+# keep publication-level measures independent of the number of affiliations
+present <- function(x) !is.na(x) & nzchar(trimws(as.character(x)))
+yes <- function(x) !is.na(x) & tolower(as.character(x)) == "true"
+number <- function(x, digits = 0L) {
+  if (!length(x) || is.na(x)) {
+    return("not available")
+  }
+  formatC(x, format = "f", digits = digits, big.mark = ",")
+}
+percentage <- function(n, total) {
+  if (!total) {
+    return("not available")
+  }
+  paste0(number(100 * n / total, 1L), "%")
+}
+plural <- function(n, singular) {
+  if (n == 1L) singular else paste0(singular, "s")
+}
+first_present <- function(x) {
+  values <- unique(as.character(x[present(x)]))
+  if (length(values)) values[[1]] else "Not recorded"
+}
+papers <- records[!duplicated(records$paper_id), ]
+papers <- papers[order(papers$year, papers$title), ]
+articles <- papers[papers$publication_type == "articulo", ]
+chapters <- papers[papers$publication_type == "capitulo", ]
+article_count <- nrow(articles)
+first_articles <- sum(yes(articles$first_author))
+corresponding_articles <- sum(yes(articles$corresponding_author))
+first_chapters <- sum(yes(chapters$first_author))
+known_years <- sort(unique(papers$year[!is.na(papers$year)]))
+year_range <- if (!length(known_years)) {
+  "dates not recorded"
+} else if (length(known_years) == 1L) {
+  as.character(known_years[[1]])
+} else {
+  paste(range(known_years), collapse = "–")
+}
+team_sizes <- articles$author_count[!is.na(articles$author_count)]
+team_median <- if (length(team_sizes)) stats::median(team_sizes) else NA_real_
+threshold <- as.integer(params$large_team_threshold)
+if (is.na(threshold) || threshold < 2L) {
+  stop("large_team_threshold must be an integer greater than one.")
+}
+
+# remove aggregate byline records and identify the applicant before counting
+people <- records[records$author_record_type == "person", ]
+self_papers <- unique(people$paper_id[yes(people$is_self)])
+coauthors <- people[
+  people$paper_id %in%
+    self_papers &
+    !is.na(people$is_self) &
+    !yes(people$is_self),
+]
+coauthors$institution_key <- ifelse(
+  present(coauthors$ror_id),
+  coauthors$ror_id,
+  coauthors$institution_id
+)
+coauthor_authorships <- coauthors[
+  !duplicated(paste(coauthors$paper_id, coauthors$coauthor_key)),
+]
+known_country_authorships <- unique(paste(
+  coauthors$paper_id[present(coauthors$country_code)],
+  coauthors$coauthor_key[present(coauthors$country_code)]
+))
+country_coverage <- percentage(
+  length(known_country_authorships),
+  nrow(coauthor_authorships)
+)
+resolved <- coauthors[
+  coauthors$author_identity_status == "resolved" &
+    present(coauthors$coauthor_key),
+]
+resolved_collaborators <- length(unique(resolved$coauthor_key))
+unresolved_authorships <- sum(
+  coauthor_authorships$author_identity_status != "resolved" |
+    !present(coauthor_authorships$author_identity_status),
+  na.rm = TRUE
+)
+
+# count countries and institutions once per paper and stable identifier
+country_rows <- coauthors[present(coauthors$country_code), ]
+country_groups <- split(country_rows, country_rows$country_code)
+country_table <- if (length(country_groups)) {
+  do.call(
+    rbind,
+    lapply(country_groups, function(x) {
+      data.frame(
+        Country = first_present(x$country),
+        Code = first_present(x$country_code),
+        Papers = length(unique(x$paper_id))
+      )
+    })
+  )
+} else {
+  data.frame(Country = character(), Code = character(), Papers = integer())
+}
+country_table <- country_table[
+  order(-country_table$Papers, country_table$Country),
+]
+institution_rows <- coauthors[present(coauthors$institution_key), ]
+institution_groups <- split(institution_rows, institution_rows$institution_key)
+institution_table <- if (length(institution_groups)) {
+  do.call(
+    rbind,
+    lapply(institution_groups, function(x) {
+      data.frame(
+        Institution = first_present(x$institution_name),
+        Country = first_present(x$country),
+        City = first_present(x$city),
+        Papers = length(unique(x$paper_id))
+      )
+    })
+  )
+} else {
+  data.frame(
+    Institution = character(),
+    Country = character(),
+    City = character(),
+    Papers = integer()
+  )
+}
+institution_table <- institution_table[
+  order(-institution_table$Papers, institution_table$Institution),
+]
+small_papers <- papers$paper_id[
+  !is.na(papers$author_count) & papers$author_count < threshold
+]
+small_coauthors <- coauthors[coauthors$paper_id %in% small_papers, ]
+small_country_count <- length(unique(
+  small_coauthors$country_code[present(small_coauthors$country_code)]
+))
+small_institution_count <- length(unique(
+  small_coauthors$institution_key[present(small_coauthors$institution_key)]
+))
+cohort_sentence <- if (length(small_papers) < nrow(papers)) {
+  paste0(
+    "Among publications with fewer than ",
+    number(threshold),
+    " authors, the known collaboration footprint covers ",
+    number(small_country_count),
+    " countries and ",
+    number(small_institution_count),
+    " institutions."
+  )
+} else {
+  ""
+}
+
+# carry the recorded exclusion scope into the report
+excluded_dois <- unique(trimws(unlist(strsplit(
+  records$excluded_dois[present(records$excluded_dois)],
+  ";",
+  fixed = TRUE
+))))
+exclusion_note <- if (length(excluded_dois)) {
+  links <- vapply(
+    excluded_dois,
+    function(doi) {
+      paste0("[", doi, "](https://doi.org/", URLencode(doi), ")")
+    },
+    character(1)
+  )
+  paste0("The CSV explicitly excludes DOI ", paste(links, collapse = ", "), ".")
+} else {
+  "No DOI exclusions are recorded in the CSV."
+}
+
+# map distinct institutions with valid recorded coordinates
+map_parts <- lapply(institution_groups, function(x) {
+  lat <- suppressWarnings(as.numeric(x$latitude))
+  lon <- suppressWarnings(as.numeric(x$longitude))
+  valid <- is.finite(lat) & is.finite(lon) & abs(lat) <= 90 & abs(lon) <= 180
+  if (!any(valid)) {
+    return(NULL)
+  }
+  first <- which(valid)[[1]]
+  data.frame(
+    Institution = first_present(x$institution_name),
+    City = first_present(x$city),
+    Country = first_present(x$country),
+    Papers = length(unique(x$paper_id)),
+    Latitude = lat[[first]],
+    Longitude = lon[[first]]
+  )
+})
+map_parts <- Filter(Negate(is.null), map_parts)
+map_table <- if (length(map_parts)) {
+  do.call(rbind, map_parts)
+} else {
+  data.frame(
+    Institution = character(),
+    City = character(),
+    Country = character(),
+    Papers = integer(),
+    Latitude = numeric(),
+    Longitude = numeric()
+  )
+}
+
+# distinguish known international collaborations from incomplete affiliations
+international <- vapply(
+  articles$paper_id,
+  function(id) {
+    x <- people[people$paper_id == id, ]
+    self_countries <- unique(x$country_code[
+      yes(x$is_self) & present(x$country_code)
+    ])
+    if (!length(self_countries)) {
+      return(NA)
+    }
+    partners <- x[!is.na(x$is_self) & !yes(x$is_self), ]
+    partner_countries <- partners$country_code[present(partners$country_code)]
+    if (any(!partner_countries %in% self_countries)) {
+      return(TRUE)
+    }
+    if (any(!present(partners$country_code))) {
+      return(NA)
+    }
+    FALSE
+  },
+  logical(1)
+)
+international_count <- sum(international, na.rm = TRUE)
+international_assessable <- sum(!is.na(international))
+
+# retain source coverage and the actual metadata retrieval dates
+citations_known <- !is.na(articles$citation_count)
+citation_total <- if (any(citations_known)) {
+  sum(articles$citation_count[citations_known])
+} else {
+  NA_real_
+}
+oa_known <- !is.na(articles$is_open_access)
+oa_count <- sum(yes(articles$is_open_access))
+retrieval_dates <- sort(unique(substr(
+  papers$metadata_retrieved_at[present(papers$metadata_retrieved_at)],
+  1L,
+  10L
+)))
+retrieval_range <- if (!length(retrieval_dates)) {
+  "no online retrieval dates recorded"
+} else if (length(retrieval_dates) == 1L) {
+  retrieval_dates[[1]]
+} else {
+  paste(range(retrieval_dates), collapse = " to ")
+}
+online_papers <- sum(papers$metadata_source != "workbook", na.rm = TRUE)
+authorship_mismatches <- sum(
+  !is.na(papers$metadata_author_count_matches) &
+    !yes(papers$metadata_author_count_matches)
+)
+cohort_table <- data.frame(
+  Scope = c("All publications", paste0("Fewer than ", threshold, " authors")),
+  Publications = c(nrow(papers), length(small_papers)),
+  Countries = c(nrow(country_table), small_country_count),
+  Institutions = c(nrow(institution_table), small_institution_count)
+)
+if (length(small_papers) == nrow(papers)) {
+  cohort_table <- cohort_table[1, ]
+}
+collaborator_groups <- split(resolved, resolved$coauthor_key)
+collaborator_table <- if (length(collaborator_groups)) {
+  do.call(
+    rbind,
+    lapply(collaborator_groups, function(x) {
+      data.frame(
+        Collaborator = first_present(x$author_name),
+        Papers = length(unique(x$paper_id))
+      )
+    })
+  )
+} else {
+  data.frame(Collaborator = character(), Papers = integer())
+}
+collaborator_table <- collaborator_table[
+  order(-collaborator_table$Papers, collaborator_table$Collaborator),
+]
+repeat_collaborators <- sum(collaborator_table$Papers > 1L)
+
+# prepare compact detail tables from the same CSV
+output_table <- as.data.frame(
+  table(
+    Year = papers$year,
+    Type = papers$publication_type
+  ),
+  stringsAsFactors = FALSE
+)
+output_table <- output_table[output_table$Freq > 0, ]
+names(output_table)[[3]] <- "Publications"
+journal_table <- as.data.frame(table(Journal = articles$journal))
+names(journal_table)[[2]] <- "Articles"
+journal_table <- journal_table[order(-journal_table$Articles), ]
+coverage_table <- data.frame(
+  Publication = papers$title,
+  Source = papers$metadata_source,
+  Status = papers$metadata_status,
+  `Workbook authors` = papers$author_count,
+  `Metadata authors` = papers$metadata_author_count,
+  `Author counts agree` = ifelse(
+    is.na(papers$metadata_author_count_matches),
+    "Not available",
+    ifelse(yes(papers$metadata_author_count_matches), "Yes", "No")
+  ),
+  `Applicant identified` = ifelse(
+    papers$paper_id %in% self_papers,
+    "Yes",
+    "No"
+  ),
+  check.names = FALSE
+)
+show_table <- function(x) {
+  if (!nrow(x)) {
+    cat("No resolved records are available for this table.\n")
+  } else {
+    cat('<div style="overflow-x:auto">\n')
+    print(knitr::kable(x, row.names = FALSE, format = "html", escape = TRUE))
+    cat("</div>\n")
+  }
+}
+
+# retain one source row per activity when counting records
+activity_required <- c(
+  "activity_id",
+  "source_sheet",
+  "source_row",
+  "activity_type",
+  "subtype",
+  "title",
+  "entity",
+  "detail",
+  "start_date",
+  "end_date",
+  "year",
+  "attendance_mode",
+  "country_role",
+  "country_code",
+  "country",
+  "is_foreign",
+  "reference_country",
+  "ror_id",
+  "institution_name",
+  "programme_id",
+  "programme_scope",
+  "international_programme",
+  "role",
+  "is_pi",
+  "amount",
+  "currency",
+  "amount_type",
+  "hours",
+  "declared_units",
+  "duration_months_declared",
+  "duration_months_calendar",
+  "duration_days_exact",
+  "aggregate_record",
+  "date_status",
+  "date_duration_discrepancy",
+  "coverage_note",
+  "period_years",
+  "funding",
+  "call",
+  "programme_source",
+  "as_of_date",
+  "career_stage"
+)
+activity_missing <- setdiff(activity_required, names(activities))
+if (length(activity_missing)) {
+  stop(
+    "Activity fields missing from stats.csv: ",
+    paste(activity_missing, collapse = ", ")
+  )
+}
+if (!nrow(activities) || any(!present(activities$activity_id))) {
+  stop("The statistics CSV must contain identified activity records.")
+}
+events <- activities[!duplicated(activities$activity_id), ]
+reference_code <- as.character(all_records$reference_country[[1]])
+reference_name <- first_present(activities$country[
+  activities$country_code == reference_code & present(activities$country_code)
+])
+join_values <- function(x) {
+  values <- sort(unique(as.character(x[present(x)])))
+  if (length(values)) paste(values, collapse = "; ") else "Not recorded"
+}
+human_label <- function(x) {
+  value <- gsub("_", " ", as.character(x), fixed = TRUE)
+  ifelse(
+    present(value),
+    paste0(toupper(substr(value, 1L, 1L)), substring(value, 2L)),
+    "Not recorded"
+  )
+}
+stage_label <- function(x) {
+  labels <- c(
+    pre_PhD = "Before PhD",
+    post_PhD = "After PhD",
+    not_determined = "Not determined"
+  )
+  result <- unname(labels[as.character(x)])
+  result[is.na(result)] <- human_label(x[is.na(result)])
+  result
+}
+event_ids <- function(x) unique(x$activity_id)
+event_count <- function(x) length(event_ids(x))
+event_rows <- function(ids) events[events$activity_id %in% ids, ]
+known_codes <- function(x) unique(x$country_code[present(x$country_code)])
+foreign_rows <- function(x) x[yes(x$is_foreign), ]
+observed <- !events$date_status %in% c("planned", "future", "scheduled")
+observed_ids <- events$activity_id[observed]
+documented <- activities[activities$activity_id %in% observed_ids, ]
+host_roles <- c("host_institution", "activity_location")
+physical_types <- c("appointment", "research_stay", "presentation", "training")
+physical_rows <- documented[
+  documented$activity_type %in%
+    physical_types &
+    documented$country_role %in% host_roles &
+    !tolower(ifelse(
+      is.na(documented$attendance_mode),
+      "",
+      documented$attendance_mode
+    )) %in%
+      c("online", "virtual", "remote"),
+]
+physical_foreign <- foreign_rows(physical_rows)
+physical_country_count <- length(known_codes(physical_foreign))
+
+# keep research mobility distinct from meetings, awards and project facilities
+mobility <- documented[
+  documented$activity_type %in%
+    c("appointment", "research_stay") &
+    documented$country_role == "host_institution",
+]
+foreign_mobility <- foreign_rows(mobility)
+foreign_mobility_ids <- event_ids(foreign_mobility)
+foreign_stays <- foreign_mobility[
+  foreign_mobility$activity_type == "research_stay",
+]
+foreign_appointments <- foreign_mobility[
+  foreign_mobility$activity_type == "appointment",
+]
+mobility_country_count <- length(known_codes(foreign_mobility))
+mobility_host_name <- ifelse(
+  present(foreign_mobility$institution_name),
+  foreign_mobility$institution_name,
+  foreign_mobility$entity
+)
+mobility_host_key <- ifelse(
+  present(foreign_mobility$ror_id),
+  foreign_mobility$ror_id,
+  paste(
+    foreign_mobility$country_code,
+    tolower(mobility_host_name)
+  )
+)
+mobility_host_count <- length(unique(mobility_host_key[
+  present(mobility_host_name) | present(foreign_mobility$ror_id)
+]))
+mobility_events <- event_rows(foreign_mobility_ids)
+aggregate_mobility_count <- sum(yes(mobility_events$aggregate_record))
+mobility_discrepancies <- mobility_events[
+  yes(mobility_events$date_duration_discrepancy),
+]
+undated_mobility_count <- sum(
+  !present(mobility_events$start_date) | !present(mobility_events$end_date)
+)
+mobility_groups <- split(foreign_mobility, foreign_mobility$activity_id)
+mobility_table <- if (length(mobility_groups)) {
+  do.call(
+    rbind,
+    lapply(mobility_groups, function(x) {
+      row <- x[1, ]
+      hosts <- x$institution_name
+      if (!any(present(hosts))) {
+        hosts <- x$entity
+      }
+      period <- if (present(row$start_date) && present(row$end_date)) {
+        paste(row$start_date, row$end_date, sep = " – ")
+      } else if (present(row$period_years)) {
+        paste0(row$period_years, " (separate periods)")
+      } else {
+        "Dates not recorded"
+      }
+      data.frame(
+        Activity = row$title,
+        Host = join_values(hosts),
+        Country = join_values(x$country),
+        Stage = stage_label(row$career_stage),
+        Period = period,
+        `Declared months` = number(row$duration_months_declared, 1L),
+        `Calendar months covered` = number(row$duration_months_calendar),
+        `Exact dated days` = number(row$duration_days_exact),
+        `Aggregate record` = ifelse(yes(row$aggregate_record), "Yes", "No"),
+        Notes = ifelse(present(row$coverage_note), row$coverage_note, ""),
+        Source = paste0(row$source_sheet, ":", row$source_row),
+        check.names = FALSE
+      )
+    })
+  )
+} else {
+  data.frame()
+}
+mobility_stage_groups <- split(mobility_events, mobility_events$career_stage)
+mobility_stage_table <- if (length(mobility_stage_groups)) {
+  do.call(
+    rbind,
+    lapply(mobility_stage_groups, function(x) {
+      locations <- foreign_mobility[
+        foreign_mobility$activity_id %in% x$activity_id,
+      ]
+      data.frame(
+        Stage = stage_label(first_present(x$career_stage)),
+        `Research activity records` = nrow(x),
+        Countries = join_values(locations$country),
+        check.names = FALSE
+      )
+    })
+  )
+} else {
+  data.frame()
+}
+post_phd_mobility_count <- sum(
+  mobility_events$career_stage == "post_PhD",
+  na.rm = TRUE
+)
+
+# distinguish physical presentations abroad from online or domestic records
+presentation_rows <- physical_rows[
+  physical_rows$activity_type == "presentation" &
+    physical_rows$country_role == "activity_location",
+]
+foreign_presentations <- foreign_rows(presentation_rows)
+presentation_events <- events[events$activity_type == "presentation", ]
+online_presentations <- presentation_events[
+  presentation_events$activity_id %in%
+    observed_ids &
+    tolower(ifelse(
+      is.na(presentation_events$attendance_mode),
+      "",
+      presentation_events$attendance_mode
+    )) %in%
+      c("online", "virtual", "remote"),
+]
+foreign_invited <- foreign_presentations[
+  grepl(
+    "invited|keynote|seminario invitado",
+    foreign_presentations$subtype,
+    ignore.case = TRUE
+  ),
+]
+presentation_country_count <- length(known_codes(foreign_presentations))
+conference_events <- events[
+  events$activity_type %in% c("presentation", "conference_organisation"),
+]
+conference_table <- if (nrow(conference_events)) {
+  do.call(
+    rbind,
+    lapply(conference_events$activity_id, function(id) {
+      x <- activities[activities$activity_id == id, ]
+      row <- x[1, ]
+      data.frame(
+        Year = row$year,
+        Contribution = row$subtype,
+        Stage = stage_label(row$career_stage),
+        Event = row$entity,
+        Location = join_values(x$country[
+          x$country_role == "activity_location"
+        ]),
+        Mode = row$attendance_mode,
+        Status = human_label(row$date_status),
+        Type = human_label(row$activity_type),
+        Source = paste0(row$source_sheet, ":", row$source_row)
+      )
+    })
+  )
+} else {
+  data.frame()
+}
+
+# count project records and programme evidence without adding overlapping awards
+projects <- events[events$activity_type == "project", ]
+international_projects <- projects[yes(projects$international_programme), ]
+international_pi_projects <- international_projects[
+  yes(international_projects$is_pi),
+]
+facility_rows <- activities[activities$country_role == "facility_access", ]
+facility_country_count <- length(known_codes(foreign_rows(facility_rows)))
+project_table <- if (nrow(projects)) {
+  do.call(
+    rbind,
+    lapply(projects$activity_id, function(id) {
+      x <- activities[activities$activity_id == id, ]
+      row <- x[1, ]
+      data.frame(
+        Project = row$title,
+        Period = paste(row$start_date, row$end_date, sep = " – "),
+        Status = human_label(row$date_status),
+        Programme = row$programme_id,
+        Scope = human_label(row$programme_scope),
+        Funder = row$funding,
+        Call = row$call,
+        `Host country` = join_values(x$country[
+          x$country_role == "project_host"
+        ]),
+        Host = join_values(x$institution_name[
+          x$country_role == "project_host"
+        ]),
+        `Facility access countries` = join_values(x$country[
+          x$country_role == "facility_access"
+        ]),
+        Amount = number(
+          row$amount,
+          as.integer(!is.na(row$amount) && row$amount %% 1 != 0)
+        ),
+        Currency = row$currency,
+        `Amount type` = row$amount_type,
+        Role = row$role,
+        Source = paste0(row$source_sheet, ":", row$source_row),
+        check.names = FALSE
+      )
+    })
+  )
+} else {
+  data.frame()
+}
+
+# retain training, teaching and supervision as distinct evidence
+training_rows <- documented[
+  documented$activity_type == "training" &
+    documented$country_role %in% host_roles,
+]
+foreign_training <- event_rows(event_ids(foreign_rows(training_rows)))
+foreign_training_hours <- sum(foreign_training$hours, na.rm = TRUE)
+supervision <- events[events$activity_type == "supervision", ]
+international_supervision <- supervision[
+  yes(supervision$international_programme),
+]
+teaching <- events[events$activity_type == "teaching", ]
+teaching_rows <- activities[
+  activities$activity_type == "teaching" &
+    activities$country_role == "host_institution",
+]
+foreign_teaching_count <- event_count(foreign_rows(teaching_rows))
+teaching_country_known <- length(event_ids(teaching_rows[
+  present(teaching_rows$country_code),
+]))
+teaching_sentence <- if (
+  nrow(teaching) &&
+    teaching_country_known == nrow(teaching) &&
+    !foreign_teaching_count
+) {
+  paste0(
+    "All ",
+    number(nrow(teaching)),
+    " teaching records have documented hosts in ",
+    reference_name,
+    "."
+  )
+} else if (nrow(teaching)) {
+  paste0(
+    number(foreign_teaching_count),
+    " teaching records have documented hosts abroad; host countries are known for ",
+    number(teaching_country_known),
+    " of ",
+    number(nrow(teaching)),
+    " records."
+  )
+} else {
+  "No teaching records are present."
+}
+training_teaching_events <- events[
+  events$activity_type %in%
+    c("training", "other_training", "teaching", "supervision"),
+]
+training_teaching_table <- if (nrow(training_teaching_events)) {
+  do.call(
+    rbind,
+    lapply(training_teaching_events$activity_id, function(id) {
+      x <- activities[activities$activity_id == id, ]
+      row <- x[1, ]
+      data.frame(
+        Type = human_label(row$activity_type),
+        Activity = row$title,
+        Year = row$year,
+        Status = human_label(row$date_status),
+        Institution = row$entity,
+        `Host or activity countries` = join_values(x$country[
+          x$country_role %in% host_roles
+        ]),
+        `Partner countries` = join_values(x$country[
+          x$country_role == "partner_institution"
+        ]),
+        Programme = row$programme_id,
+        Hours = number(row$hours),
+        Source = paste0(row$source_sheet, ":", row$source_row),
+        check.names = FALSE
+      )
+    })
+  )
+} else {
+  data.frame()
+}
+
+# preserve service, languages, skills and other records
+# keep geography tied to the available evidence
+service <- events[
+  events$activity_type %in%
+    c("review", "editorial", "evaluation", "membership", "outreach"),
+]
+reviews <- service[service$activity_type == "review", ]
+review_units <- sum(reviews$declared_units, na.rm = TRUE)
+review_venues <- length(unique(reviews$entity[present(reviews$entity)]))
+service_table <- if (nrow(service)) {
+  data.frame(
+    Type = human_label(service$activity_type),
+    Role = service$title,
+    Entity = service$entity,
+    Year = service$year,
+    `Declared units` = vapply(service$declared_units, number, character(1)),
+    Programme = service$programme_id,
+    Source = paste0(service$source_sheet, ":", service$source_row),
+    check.names = FALSE
+  )
+} else {
+  data.frame()
+}
+language_skill <- events[
+  events$activity_type %in% c("language", "skill", "other"),
+]
+language_skill_table <- data.frame(
+  Type = human_label(language_skill$activity_type),
+  Description = language_skill$title,
+  Source = paste0(language_skill$source_sheet, ":", language_skill$source_row)
+)
+degree_events <- events[events$activity_type == "degree", ]
+degree_table <- data.frame(
+  Degree = degree_events$title,
+  Institution = degree_events$entity,
+  Year = degree_events$year,
+  Source = paste0(degree_events$source_sheet, ":", degree_events$source_row)
+)
+
+# show country links by evidence category
+# keep different relationships out of a combined country total
+evidence_rows <- list(
+  `Coauthored publications` = data.frame(
+    country_code = coauthors$country_code,
+    id = coauthors$paper_id
+  ),
+  `Research mobility records` = data.frame(
+    country_code = mobility$country_code,
+    id = mobility$activity_id
+  ),
+  Presentations = data.frame(
+    country_code = presentation_rows$country_code,
+    id = presentation_rows$activity_id
+  ),
+  Training = data.frame(
+    country_code = training_rows$country_code,
+    id = training_rows$activity_id
+  ),
+  `Project hosts` = data.frame(
+    country_code = activities$country_code[
+      activities$country_role == "project_host"
+    ],
+    id = activities$activity_id[activities$country_role == "project_host"]
+  ),
+  `Awarded facility access` = data.frame(
+    country_code = facility_rows$country_code,
+    id = facility_rows$activity_id
+  ),
+  `Supervision partners` = data.frame(
+    country_code = activities$country_code[
+      activities$country_role == "partner_institution"
+    ],
+    id = activities$activity_id[
+      activities$country_role == "partner_institution"
+    ]
+  )
+)
+matrix_codes <- sort(unique(unlist(lapply(evidence_rows, function(x) {
+  x$country_code[present(x$country_code)]
+}))))
+all_country_names <- rbind(
+  unique(coauthors[c("country_code", "country")]),
+  unique(activities[c("country_code", "country")])
+)
+country_evidence_table <- data.frame(
+  Country = vapply(
+    matrix_codes,
+    function(code) {
+      first_present(all_country_names$country[
+        all_country_names$country_code == code &
+          present(all_country_names$country_code)
+      ])
+    },
+    character(1)
+  ),
+  Code = matrix_codes
+)
+for (category in names(evidence_rows)) {
+  x <- evidence_rows[[category]]
+  country_evidence_table[[category]] <- vapply(
+    matrix_codes,
+    function(code) {
+      length(unique(x$id[present(x$country_code) & x$country_code == code]))
+    },
+    integer(1)
+  )
+}
+
+# expose coverage and source rows for every activity category
+activity_groups <- split(events, events$activity_type)
+activity_inventory <- do.call(
+  rbind,
+  lapply(activity_groups, function(x) {
+    data.frame(
+      Category = human_label(x$activity_type[[1]]),
+      Records = nrow(x),
+      `With programme evidence` = sum(yes(x$international_programme)),
+      `With dated periods` = sum(present(x$start_date) & present(x$end_date)),
+      check.names = FALSE
+    )
+  })
+)
+activity_issues <- events[
+  present(events$coverage_note) | yes(events$date_duration_discrepancy),
+]
+activity_coverage_table <- data.frame(
+  Activity = activity_issues$title,
+  Category = human_label(activity_issues$activity_type),
+  Notes = activity_issues$coverage_note,
+  Source = paste0(activity_issues$source_sheet, ":", activity_issues$source_row)
+)
+programme_rows <- unique(activities[
+  present(activities$programme_id),
+  c("programme_id", "programme_scope", "programme_source")
+])
+programme_rows$programme_scope <- human_label(programme_rows$programme_scope)
+names(programme_rows) <- c("Programme", "Scope", "Source")
+
+# retain the organisation role when listing resolved activity institutions
+activity_institutions <- activities[
+  present(activities$ror_id) &
+    activities$country_role != "unspecified",
+]
+activity_institution_groups <- split(
+  activity_institutions,
+  activity_institutions$ror_id
+)
+activity_institution_table <- if (length(activity_institution_groups)) {
+  do.call(
+    rbind,
+    lapply(activity_institution_groups, function(x) {
+      data.frame(
+        Institution = first_present(x$institution_name),
+        Country = join_values(x$country),
+        Roles = join_values(human_label(x$country_role)),
+        `Activity records` = event_count(x),
+        check.names = FALSE
+      )
+    })
+  )
+} else {
+  data.frame()
+}
+```
+
+
+Using **`r reference_name`** as the reference country, my structured CV data contain `r number(nrow(events))` activity records. Research abroad is documented through **`r number(event_count(foreign_stays))` `r plural(event_count(foreign_stays), "research-stay record")`** and **`r number(event_count(foreign_appointments))` `r plural(event_count(foreign_appointments), "appointment record")`**, covering `r number(mobility_country_count)` foreign countries and `r number(mobility_host_count)` hosts. These include `r number(aggregate_mobility_count)` `r plural(aggregate_mobility_count, "aggregate record")` covering separate visits. The post-PhD subset contains `r number(post_phd_mobility_count)` `r plural(post_phd_mobility_count, "research record")`. Presentations and training extend the documented overseas activity locations to `r number(physical_country_count)` countries.
+
+My `r number(nrow(projects))` project records include **`r number(nrow(international_projects))` that explicitly name international programmes**, with a principal-investigator role in `r number(nrow(international_pi_projects))` of those. Awarded facility access covers `r number(facility_country_count)` foreign countries and is recorded separately from research visits. My visibility record includes **`r number(event_count(foreign_presentations))` presentations abroad**, including `r number(event_count(foreign_invited))` invited contributions, plus `r number(nrow(online_presentations))` `r plural(nrow(online_presentations), "online presentation")`. I have `r number(nrow(foreign_training))` training records abroad (`r number(foreign_training_hours)` recorded hours) and `r number(nrow(international_supervision))` supervision records linked to international training programmes. `r teaching_sentence`
+
+My publication record contains **`r number(article_count)` journal articles** and `r number(nrow(chapters))` `r plural(nrow(chapters), "book chapter")`, with `r number(first_articles)` first-author and `r number(corresponding_articles)` corresponding-author articles. It connects me to **`r number(resolved_collaborators)` identified coauthors**, whose known publication affiliations span `r number(nrow(country_table))` countries and `r number(nrow(institution_table))` institutions. Service records include `r number(review_units)` declared reviews across `r number(review_venues)` journals. Counts describe the evidence available in the CSV snapshot dated **`r as_of_date`**; missing locations and aggregate records remain visible below.
+
+<details>
+<summary>Geographic evidence by category</summary>
+
+Each cell counts distinct publications or activity records linked to that country. Research mobility, conference locations, project hosts, facility access and coauthor affiliations have different meanings and are not added into a single “countries visited” total. The reference-country row remains visible for context.
+
+```{r}
+#| results: asis
+show_table(country_evidence_table)
+show_table(activity_institution_table)
+```
+
+</details>
+
+<details>
+<summary>Research mobility, durations and career stage</summary>
+
+Only appointments and research-stay records with a documented foreign host enter these mobility counts. Project participation, scholarships, meetings and training do not add extra research-mobility periods. A stay record may cover several visits. Foreign research records marked as aggregate records: `r number(aggregate_mobility_count)`; records without a complete dated interval: `r number(undated_mobility_count)`.
+
+Declared months, calendar months covered and exact dated days are shown separately. A month-only date range does not establish exact travel days, and undated aggregate visits cannot be placed in a non-overlapping timeline. No combined exact “months abroad” total is inferred. Recorded duration/date discrepancies to check against the supporting documents: **`r number(nrow(mobility_discrepancies))`**.
+
+```{r}
+#| results: asis
+show_table(mobility_table)
+show_table(mobility_stage_table)
+```
+
+</details>
+
+<details>
+<summary>Projects, funding programmes and access awards</summary>
+
+International programme participation is identified from the programme names and cited programme definitions. It does not by itself establish a multinational consortium or personal travel. Amounts retain their stated currency and type: total project budgets and estimated access awards are not treated as personal funds. A fellowship may also appear under appointments or scholarships; records from different sections are not summed into a count of unique awards.
+
+```{r}
+#| results: asis
+show_table(project_table)
+show_table(programme_rows)
+```
+
+</details>
+
+<details>
+<summary>Conferences, invited contributions and scientific organisation</summary>
+
+There are `r number(nrow(presentation_events))` presentation records and `r number(sum(events$activity_type == "conference_organisation"))` scientific-organisation records. Foreign presentation venues cover `r number(presentation_country_count)` countries. Online contributions do not establish travel, and a meeting held in the reference country does not become foreign mobility because its title or audience is international. Programme titles are retained as entered.
+
+```{r}
+#| results: asis
+show_table(conference_table)
+```
+
+</details>
+
+<details>
+<summary>Training, teaching and supervision</summary>
+
+Training hours are summed only from recorded hour values. Host or activity locations and supervision-partner countries are separate fields. Participation in an international internship programme is evidence of programme involvement; student nationality and unrecorded travel are not inferred from names. `r teaching_sentence`
+
+```{r}
+#| results: asis
+show_table(training_teaching_table)
+```
+
+</details>
+
+<details>
+<summary>Service, education, languages and other CV records</summary>
+
+Review totals use the explicitly declared review units, while editorial, evaluation and association entries are counted as records rather than inferred numbers of decisions or events. Languages and skills retain their self-reported descriptions; no language certificate or proficiency scale is inferred.
+
+```{r}
+#| results: asis
+show_table(service_table)
+show_table(degree_table)
+show_table(language_skill_table)
+show_table(activity_inventory)
+```
+
+</details>
+
+<details>
+<summary>Activity coverage and AEI interpretation</summary>
+
+The [2026 Juan de la Cierva assessment criteria](https://www.aei.gob.es/sites/default/files/convocatory_info/assistants/2026-09/Convocatoria%20JDC%202026_firmada.pdf#page=41) consider the relevance, contributions and results of research stays, international collaborative outputs, direct participation in international programmes and projects, and teaching or researcher training abroad. These tables organise candidate evidence for that review; they do not calculate an assessment score or substitute for supporting documents. The research team's internationalisation is assessed separately.
+
+Research-stay records contain host, date, supervisor and duration information where available. An explicit link from each stay to its contributions and outputs supports that part of the assessment. This report does not infer such links from shared publication years or coauthors.
+
+All activity records in the workbook are retained, including rows not selected for the CVA. Source references identify their worksheet and row. Planned records remain in the inventory and detail tables but are excluded from completed/documented overseas activity-location counts. Country evidence uses the explicit place or a resolved organisation; an organisation's country is not evidence of personal attendance. Facility access and supervision partners retain distinct relationship roles. Skills, languages, hobbies and personal-data rows do not become international research achievements merely by being present in the source.
+
+The report reads `input/stats.csv` once. The `record_type` field separates publication–author–affiliation rows from CV-activity relations, so each measure uses the appropriate records. One file-wide reference country and as-of date define the reporting scope.
+
+```{r}
+#| results: asis
+show_table(activity_coverage_table)
+```
+
+</details>
+
+<details>
+<summary>Publication record and collaboration details</summary>
+
+
+My publication record contains **`r number(article_count)` `r plural(article_count, "journal article")`** and **`r number(nrow(chapters))` `r plural(nrow(chapters), "book chapter")`** from `r year_range`. I am first author on **`r number(first_articles)` `r plural(first_articles, "article")`** (`r percentage(first_articles, article_count)`) and corresponding author on **`r number(corresponding_articles)` `r plural(corresponding_articles, "article")`** (`r percentage(corresponding_articles, article_count)`); I am also first author on `r number(first_chapters)` `r plural(first_chapters, "book chapter")`. The median article team contains `r number(team_median, as.integer(!is.na(team_median) && team_median %% 1 != 0))` authors.
+
+My coauthors’ documented affiliations identify at least **`r number(nrow(country_table))` countries** and **`r number(nrow(institution_table))` institutions**. There are `r number(resolved_collaborators)` coauthors with resolved researcher identifiers, including `r number(repeat_collaborators)` collaborators appearing on more than one publication; `r number(unresolved_authorships)` additional coauthor authorships lack resolved identities. `r cohort_sentence` International collaboration is identified in `r number(international_count)` of `r number(international_assessable)` assessable articles (`r percentage(international_count, international_assessable)`); `r number(article_count - international_assessable)` articles remain unassessable.
+
+The available OpenAlex records report **`r number(citation_total)` citations** across `r number(sum(citations_known))` of `r number(article_count)` articles. Of `r number(sum(oa_known))` articles with open-access information, `r number(oa_count)` are open access (`r percentage(oa_count, sum(oa_known))`). Online metadata cover `r number(online_papers)` of `r number(nrow(papers))` publications and were retrieved on `r retrieval_range`; a coauthor country is available for `r country_coverage` of the recorded coauthor authorships. These country and institution totals are lower bounds where affiliations are missing, and describe affiliations recorded for the publications rather than verified current employment.
+
+<details>
+<summary>Countries and institutions</summary>
+
+Counts use coauthor affiliations only and count each publication once per country or institution. The team-size comparison uses the same rule for every publication.
+
+```{r}
+#| results: asis
+show_table(cohort_table)
+show_table(country_table)
+show_table(institution_table)
+```
+
+</details>
+
+<details>
+<summary>Map of coauthor institutions</summary>
+
+The map covers `r number(nrow(map_table))` of `r number(nrow(institution_table))` identified institutions with available coordinates. Marker labels show the institution, location and number of shared publications. The map works offline.
+
+```{r}
+# combine coincident locations so every institution remains visible in popups
+if (nrow(map_table)) {
+  map_groups <- split(
+    map_table,
+    paste(map_table$Latitude, map_table$Longitude)
+  )
+  points <- do.call(
+    rbind,
+    lapply(map_groups, function(x) {
+      escape <- htmltools::htmlEscape
+      labels <- paste0(
+        "<strong>",
+        escape(x$Institution),
+        "</strong><br>",
+        escape(paste(x$City, x$Country, sep = ", ")),
+        "<br>",
+        x$Papers,
+        " shared ",
+        vapply(x$Papers, plural, character(1), singular = "publication")
+      )
+      data.frame(
+        Latitude = x$Latitude[[1]],
+        Longitude = x$Longitude[[1]],
+        Label = paste(labels, collapse = "<br><br>")
+      )
+    })
+  )
+  labels <- lapply(points$Label, htmltools::HTML)
+  world <- maps::map("world", fill = TRUE, plot = FALSE)
+  map <- leaflet::leaflet(
+    points,
+    height = 420,
+    options = leaflet::leafletOptions(worldCopyJump = TRUE)
+  ) |>
+    leaflet::addPolygons(
+      data = world,
+      color = "#b8bec4",
+      weight = 0.5,
+      opacity = 1,
+      fillColor = "#f4f5f6",
+      fillOpacity = 1,
+      options = leaflet::pathOptions(interactive = FALSE)
+    ) |>
+    leaflet::addCircleMarkers(
+      lng = ~Longitude,
+      lat = ~Latitude,
+      radius = 6,
+      stroke = FALSE,
+      fillOpacity = 0.8,
+      label = labels,
+      popup = points$Label
+    ) |>
+    leaflet::fitBounds(
+      min(points$Longitude),
+      min(points$Latitude),
+      max(points$Longitude),
+      max(points$Latitude),
+      options = list(padding = c(20, 20), maxZoom = 8)
+    ) |>
+    leaflet::addControl(
+      "World outlines: maps (R)",
+      position = "bottomright"
+    )
+  htmlwidgets::onRender(
+    map,
+    "function(el, x) {
+    var map = this;
+    el.style.background = '#eaf0f4';
+    function refresh() {
+      if (el.offsetWidth && el.offsetHeight) map.invalidateSize();
+    }
+    var section = el.parentElement;
+    while (section) {
+      if (section.tagName === 'DETAILS') {
+        section.addEventListener('toggle', function() {
+          window.requestAnimationFrame(refresh);
+        });
+      }
+      section = section.parentElement;
+    }
+  }"
+  )
+} else {
+  cat("No resolved institution coordinates are available.\n")
+}
+```
+
+</details>
+
+<details>
+<summary>Repeat collaborators and publication output</summary>
+
+The collaborator table lists up to `r number(as.integer(params$collaborator_limit))` researchers, ordered by the number of shared publications. Unresolved names are retained in the CSV but are not merged into unique people.
+
+```{r}
+#| results: asis
+show_table(head(collaborator_table, as.integer(params$collaborator_limit)))
+show_table(output_table)
+show_table(journal_table)
+```
+
+</details>
+
+<details>
+<summary>Coverage and counting rules</summary>
+
+The report uses every publication in the CSV, including entries not selected for the CVA. Publication counts, author position, corresponding authorship and team sizes come from the workbook. Online affiliations are grouped using resolved institution identifiers, preferring ROR; researcher identifiers are used for unique collaborators. A paper is known to involve international collaboration when a documented coauthor country falls outside the applicant’s own documented countries on that paper. A paper is not classified as domestic when missing affiliations prevent that conclusion. Aggregate byline records are excluded from person and affiliation statistics. Co-first authorship is not inferred from author order.
+
+`r exclusion_note`
+
+There are `r number(authorship_mismatches)` publications with a disagreement between workbook and online author counts, and the applicant was identified on `r number(length(self_papers))` of `r number(nrow(papers))` publications. Papers without an identified applicant are excluded from coauthor statistics.
+
+```{r}
+#| results: asis
+show_table(coverage_table)
+```
+
+Sources: [OpenAlex authorships](https://help.openalex.org/data/authorships/), [institution data](https://help.openalex.org/data/institutions/), [citations](https://help.openalex.org/data/works/citations/) and [open-access metadata](https://help.openalex.org/data/works/open-access/). The CSV retains per-record provenance and retrieval timestamps. Refresh the data with `cva/stats.R`, then render this document again.
+
+</details>
+
+
+</details>

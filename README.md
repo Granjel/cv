@@ -98,3 +98,35 @@ From the `cva/` directory, use `Rscript cva.R` or `source("cva.R", encoding = "U
 The build checks dates, translations, authorship, the Part B character limit, A4 size, the four-page and 4 MB limits, and the established font rules. Each numbered contribution stays on one page with its explanatory quote. An entry taller than the usable page area raises an error instead of being split or shrunk. Date fields and short ranges stay together, while locations can wrap normally. Both logos appear in their usual positions on every page in both languages.
 
 Compilation files are created in the operating system's temporary directory and removed after the build. Format R code with `air`.
+
+## Retrieve CVA statistics
+
+`cva/stats.R` reads the workbook, retrieves public metadata and saves everything in `input/stats.csv`. Its `record_type` column distinguishes publication–author–affiliation rows (`publication`) from activity evidence (`activity`). Fields that do not apply to a record are blank. The workbook and CVA PDFs are not modified.
+
+From the repository directory:
+
+```sh
+Rscript cva/stats.R --render
+```
+
+From Positron's R Console:
+
+```r
+source("cva/stats.R", encoding = "UTF-8")
+stats <- retrieve_stats()
+render_stats()
+```
+
+The Quarto source `cva/stats.qmd` reads only `input/stats.csv` and calculates the text, tables and offline map. The rendered page is `cva/stats.html`. Omit `--render` to update only the CSV; `render_stats()` alone rebuilds the report without downloading metadata. It selects the current R installation through a temporary `QUARTO_R` setting.
+
+The BioScience collective appeal is excluded by the explicit `exclude_dois` argument. `reference_country` defaults to Spain (`ES`), and `as_of` defaults to today's date in Europe/Madrid. Statistics use all career records, independently of CVA selection flags.
+
+Count unique `paper_id` values for publications and unique `activity_id` values for activities. Several institutions or countries can produce multiple rows for the same record. Collaboration measures exclude the applicant and use researcher and ROR identifiers. Research mobility uses appointments and research visits; project funding, awarded facility access, supervision partners and online participation retain separate roles. Declared months, covered calendar months and exact days remain separate, and aggregate visit records do not establish a precise trip count. Programme recognition uses the same documented catalogue for all records. Source rows, URLs and retrieval dates remain in the CSV.
+
+The report organises evidence for the [Juan de la Cierva 2026 criteria](https://www.aei.gob.es/sites/default/files/convocatory_info/assistants/2026-09/Convocatoria%20JDC%202026_firmada.pdf#page=41). It flags missing evidence and does not calculate an evaluation score. Affiliation data describe the published records, rather than verified current employment; institution geography may represent the main location. Project budgets and estimated access values are not personal funding totals.
+
+Public responses are cached in the ignored `cva/.stats-cache/` directory for seven days; negative lookups are retried after one day. Use `--refresh` or `retrieve_stats(refresh = TRUE)` to refresh, and `--offline` or `retrieve_stats(offline = TRUE)` to reproduce the CSV from cached responses. Failed retrieval retains the previous CSV. The cache, rendered HTML and Quarto resources are ignored by Git.
+
+Retrieval requires `readxl`, `jsonlite`, `httr2`, `digest` and `countrycode`; rendering also needs Quarto, `knitr`, `rmarkdown`, `leaflet` and `maps`. A free `OPENALEX_API_KEY` environment variable can provide higher API limits.
+
+Sources: [OpenAlex](https://help.openalex.org/data/authorships/), [Crossref](https://www.crossref.org/documentation/retrieve-metadata/rest-api/) and [ROR](https://ror.readme.io/docs/api-affiliation). Programme classifications retain their official source links in the CSV.

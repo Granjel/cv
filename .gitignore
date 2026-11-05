@@ -3,3 +3,7 @@
 .Rproj.user/
 ~$*.xlsx
 *.local.xlsx
+cva/.stats-cache/
+cva/.quarto/
+cva/stats.html
+cva/stats_files/
