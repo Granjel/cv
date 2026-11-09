@@ -14,6 +14,6 @@ Investigo cómo las interacciones entre especies determinan la biodiversidad, la
 
 # C.4
 
-Contribuyo a una ecología abierta y reproducible compartiendo datos de investigación y código de análisis en repositorios públicos. Mis aportaciones incluyen un software con licencia MIT para estimar interacciones entre especies mediante regularización lasso y calcular diferencias estructurales de nicho y aptitud (2026; [doi: 10.5281/zenodo.23054165](https://doi.org/10.5281/zenodo.23054165)), así como un archivo de datos y código de PaNDiv publicado con licencia CC BY 4.0 (2022; [doi: 10.5281/zenodo.7343389](https://doi.org/10.5281/zenodo.7343389)). Al poner estos flujos de análisis y sus datos a disposición de otros investigadores, facilito la reproducción de los análisis y la adaptación de los métodos a nuevas preguntas ecológicas.
+Desarrollé software para estimar interacciones entre especies mediante regularización lasso y calcular diferencias estructurales de nicho y aptitud, publicado con licencia MIT (2026; [doi: 10.5281/zenodo.23054165](https://doi.org/10.5281/zenodo.23054165)).
 
-También he participado en actividades de divulgación científica en la Noche Europea de los Investigadores y en talleres escolares, acercando la investigación ecológica a públicos no especializados y jóvenes. Estas actividades complementan la difusión de mi investigación dentro de la comunidad científica.
+En 2019, realicé un peritaje biológico para un procedimiento judicial ante el juzgado de Padrón (Galicia, España), evaluando aspectos ambientales y posibles implicaciones para la salud pública asociados a la fauna urbana en un edificio residencial.

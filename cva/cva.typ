@@ -77,34 +77,41 @@
   value.slice(offset)
 }
 #let code-span(value) = text(font: "Consolas", size: 10.5pt, value)
-// backticks mark any number of code spans in workbook text
-// ordinary quotation marks remain literal input
-#let inline(value, capitals: false) = {
-  let plain(value) = ordinal-text(if capitals { upper(value) } else { value })
-  let offset = 0
-  for matched in value.matches(regex("`[^`]+`")) {
-    plain(value.slice(offset, matched.start))
-    code-span(matched.text.slice(1, -1))
-    offset = matched.end
-  }
-  plain(value.slice(offset))
-}
 // render literal Markdown nodes without evaluating their contents as Typst code
-#let markdown-inline(nodes) = {
+#let markdown-inline(nodes, capitals: false) = {
   for node in nodes {
     if node.type == "text" {
-      ordinal-text(node.text)
+      ordinal-text(if capitals { upper(node.text) } else { node.text })
     } else if node.type == "strong" {
-      strong(markdown-inline(node.children))
+      strong(markdown-inline(node.children, capitals: capitals))
     } else if node.type == "emph" {
-      emph(markdown-inline(node.children))
+      emph(markdown-inline(node.children, capitals: capitals))
     } else if node.type == "link" {
-      hyperlink(node.destination, label: markdown-inline(node.children))
+      hyperlink(node.destination, label: markdown-inline(node.children, capitals: capitals))
     } else if node.type == "code" {
       code-span(node.text)
     } else if node.type == "linebreak" {
       linebreak()
     }
+  }
+}
+// source asterisks mark emphasis and backticks mark literal code
+// ordinary quotation marks and unmatched asterisks remain literal input
+#let inline(value, capitals: false) = {
+  let formatted = if type(cv.formato_en_linea) == dictionary {
+    cv.formato_en_linea.at(value, default: none)
+  } else { none }
+  if formatted != none {
+    markdown-inline(formatted, capitals: capitals)
+  } else {
+    let plain(value) = ordinal-text(if capitals { upper(value) } else { value })
+    let offset = 0
+    for matched in value.matches(regex("`[^`]+`")) {
+      plain(value.slice(offset, matched.start))
+      code-span(matched.text.slice(1, -1))
+      offset = matched.end
+    }
+    plain(value.slice(offset))
   }
 }
 
@@ -243,7 +250,7 @@
 #if leave-note != "" {
   block(above: 4pt, below: 0pt)[
     #set par(leading: 0.4em, spacing: 0pt, justify: false)
-    #inline("*" + leave-note)
+    #"*"#inline(leave-note)
   ]
 }
 #subsection(tr("A.2. Situación profesional anterior", "A.2. Previous positions"))
@@ -261,7 +268,7 @@
         #inline(r.puesto)#" / "#linked-institution(
           r.institucion,
           r.url_institucion,
-        )#inline(" / " + r.pais)
+        )#" / "#inline(r.pais)
       ],
     ))
     .flatten(),
@@ -314,7 +321,7 @@
     tight: false,
     spacing: entry-gap,
     ..cv.congresos_detalle.map(entry => contribution[
-      #emph(inline(entry.tipo + ":")) #citation(entry)
+      #emph[#inline(entry.tipo):] #citation(entry)
     ]),
   )
 }

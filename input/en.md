@@ -1,6 +1,6 @@
 # Part B
 
-I investigate how interactions among species determine biodiversity, coexistence and ecosystem stability under environmental change. I combine field experiments with statistical and mathematical models to explain which species persist together and how communities recover after disturbance.
+I investigate how species interactions determine which species can persist together under environmental change. I combine detailed empirical data from my own field and laboratory experiments and international collaborations with mathematical models grounded in coexistence theory and ecological network approaches. My work lies at the intersection of experimental and quantitative ecology.
 
 **Scientific contributions and initiative:** During my FPU-funded PhD at the University of Sevilla, I linked nitrogen enrichment and fungal pathogens to the mechanisms of multispecies coexistence. With Eric Allan in Bern, I showed that the number of interacting species changes the importance of direct and indirect effects on coexistence (*New Phytologist*, 2023). I co-designed the research, conducted fieldwork, analysed the data and wrote the manuscript. In *Oikos* (2026), I led the analyses and software development linking simple plant interaction patterns to structural niche and fitness differences in a multitrophic grassland community. My experimental work in chemical ecology showed that volatile signalling reduces herbivore damage in *Arabidopsis* populations with contrasting life histories (*Environmental and Experimental Botany*, 2026). I am **first and corresponding author of these three papers**. For the latter research, I conceived and led CoVOCom, securing an AEET early-career project grant and coordinating the experiments.
 
@@ -14,6 +14,6 @@ I investigate how interactions among species determine biodiversity, coexistence
 
 # C.4
 
-I contribute to open and reproducible ecology by sharing research data and analytical code in public repositories. My contributions include an MIT-licensed software release for estimating species interactions using lasso regularisation and calculating structural niche and fitness differences (2026; [doi: 10.5281/zenodo.23054165](https://doi.org/10.5281/zenodo.23054165)), and a PaNDiv data-and-code archive released under CC BY 4.0 (2022; [doi: 10.5281/zenodo.7343389](https://doi.org/10.5281/zenodo.7343389)). By making these analytical workflows available alongside the underlying data, I help other researchers reproduce the analyses and adapt the methods to their own ecological questions.
+I developed software for estimating species interactions using lasso regularisation and calculating structural niche and fitness differences, released under the MIT licence (2026; [doi: 10.5281/zenodo.23054165](https://doi.org/10.5281/zenodo.23054165)).
 
-I have also participated in public science outreach through the European Researchers’ Night and school workshops, sharing ecological research with non-specialist and younger audiences. These activities complement the dissemination of my research within the scientific community.
+In 2019, I provided a biological expert assessment for judicial proceedings before the court in Padrón (Galicia, Spain), addressing environmental and potential public health concerns associated with urban wildlife in a residential building.

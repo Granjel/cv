@@ -60,6 +60,17 @@ stats_text <- function(x) {
   }
   trimws(as.character(x[[1]]))
 }
+
+# keep workbook formatting out of lookup text and saved statistics
+stats_input_text <- function(x) {
+  value <- stats_text(x)
+  if (!grepl("[*`_]", value)) {
+    return(value)
+  }
+  value <- commonmark::markdown_text(value, width = 0)
+  trimws(gsub("[\r\n]+", " ", value))
+}
+
 stats_names <- function(x) {
   result <- trimws(strsplit(stats_text(x), ";", fixed = TRUE)[[1]])
   result[nzchar(result)]
@@ -219,7 +230,7 @@ stats_read <- function(workbook) {
   ))
   publications <- lapply(seq_len(nrow(frame)), function(i) {
     row <- lapply(frame, function(column) column[[i]])
-    title <- stats_text(row$titulo)
+    title <- stats_input_text(row$titulo)
     if (!nzchar(title)) {
       stop("Empty publication title in row ", i + 1L, call. = FALSE)
     }
@@ -1247,7 +1258,7 @@ stats_activities <- function(
     frame <- frames[[sheet]]
     for (i in seq_len(nrow(frame))) {
       row <- lapply(frame, function(column) column[[i]])
-      text <- function(key) stats_text(row[[key]])
+      text <- function(key) stats_input_text(row[[key]])
       bilingual <- function(key) {
         en <- text(paste0(key, "_en"))
         if (nzchar(en)) en else text(paste0(key, "_es"))
@@ -1772,7 +1783,14 @@ retrieve_stats <- function(
   reference_country = "ES",
   as_of = as.Date(format(Sys.time(), "%Y-%m-%d", tz = "Europe/Madrid"))
 ) {
-  packages <- c("readxl", "jsonlite", "httr2", "digest", "countrycode")
+  packages <- c(
+    "readxl",
+    "jsonlite",
+    "httr2",
+    "digest",
+    "countrycode",
+    "commonmark"
+  )
   missing <- packages[
     !vapply(packages, requireNamespace, logical(1), quietly = TRUE)
   ]

@@ -890,6 +890,42 @@ cva_markdown_plain <- function(nodes) {
   )
 }
 
+# parse explicit workbook emphasis with the same safe inline Markdown nodes
+# prefix the cell so leading punctuation cannot create a heading or list
+cva_workbook_formatting <- function(value) {
+  texts <- unique(as.character(unlist(value, use.names = FALSE)))
+  texts <- texts[!is.na(texts) & grepl("*", texts, fixed = TRUE)]
+  formatted <- list()
+  prefix <- "cva-inline "
+  for (text in texts) {
+    tree <- commonmark::markdown_xml(
+      paste0(prefix, gsub("[\r\n]+", " ", text)),
+      smart = FALSE,
+      normalize = FALSE,
+      footnotes = FALSE,
+      extensions = FALSE
+    )
+    document <- xml2::read_xml(tree, options = c("NONET", "NOBLANKS"))
+    xml2::xml_ns_strip(document)
+    paragraph <- xml2::xml_children(document)[[1L]]
+    if (!length(xml2::xml_find_all(paragraph, ".//emph | .//strong"))) {
+      next
+    }
+    nodes <- xml2::xml_children(paragraph)
+    xml2::xml_text(nodes[[1L]]) <- substring(
+      xml2::xml_text(nodes[[1L]]),
+      nchar(prefix) + 1L
+    )
+    # html-looking input remains literal text, never executable markup
+    html <- xml2::xml_find_all(paragraph, ".//html_inline")
+    for (i in seq_along(html)) {
+      xml2::xml_name(html[[i]]) <- "text"
+    }
+    formatted[[text]] <- cva_markdown_inline(nodes, "workbook text")
+  }
+  formatted
+}
+
 # read the two editable sections without interpreting HTML or Typst code
 cva_read_markdown <- function(filename) {
   if (!file.exists(filename)) {
@@ -1328,8 +1364,8 @@ cva_prepare_project <- function(row, lang) {
     period,
     c(
       award,
-      cva_localized(row, "estado", lang),
-      cva_localized(row, "detalle_importe", lang)
+      cva_localized(row, "detalle_importe", lang),
+      cva_localized(row, "estado", lang)
     )
   )
   list(
@@ -1390,6 +1426,7 @@ cva_prepare <- function(
     }
     result[[paste0(tolower(name), "_detalle")]] <- details
   }
+  result$formato_en_linea <- cva_workbook_formatting(result)
   result$codigo_declarado <- cva_declared_code(result)
   result
 }
