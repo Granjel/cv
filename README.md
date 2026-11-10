@@ -2,6 +2,18 @@
 
 The CVA uses one workbook for structured information and two Markdown files for narrative text.
 
+## CVA review checklist
+
+- [ ] **Part B:** review the overall voice, opening definition and theoretical foundations, personal contributions, balance between scientific achievements and mobility, and the final research direction with Carlos.
+- [ ] **ChEMISt and RECODYN notes:** rewrite both contribution notes in the preferred style, keeping each within two rendered lines. The current wording still needs personal review.
+- [ ] **C.4 scope:** decide which activities demonstrate knowledge transfer. Present the systematic sharing of documented data and reproducible code in Part B as open science; assess any distinct software-transfer claim separately. Review the 2019 judicial expert assessment as an application of biological expertise. English C.4 currently contains the new open-science paragraph; Spanish still contains the older software paragraph.
+- [ ] **Outreach responsibilities:** confirm the scope and years of organising or co-organising the European Researchers' Night, including whether this covered the group contribution or the wider event. Update the current participation wording in Part B where appropriate.
+- [ ] **ChEMISt access value:** confirm with Lucille the documentation supporting the estimated EUR 85,000 value and distinguish awarded access and analytical services from cash funding.
+- [ ] **Mobility records:** add the French visit dates to the structured inputs so the statistics can use the documented total of 15 visits and 173 inclusive calendar days in 2023–2025. Verify exact MBG-CSIC and German stay durations if precise totals are needed; the current month ranges describe calendar coverage. Keep UNESP, Rio Claro as the main Brazilian host and UFSCar as a brief additional visit.
+- [ ] **Ongoing manuscripts:** confirm status and authorship for LUI, the Brazilian collaboration, the two US manuscripts and the postdoctoral papers. Distinguish completed publications from work in progress and avoid counting the same manuscript twice.
+- [ ] **Language consistency:** agree on the English content, then synchronise the Spanish text and bilingual spreadsheet notes, especially C.4.
+- [ ] **Submission format:** resolve the shortened author lists and code-font styling against the [2026 CVA guidelines](https://www.aei.gob.es/sites/default/files/convocatory_info/assistants/2026-09/4.CVA%202026%20guidelines.pdf). The instructions request the first three authors for lists longer than eight and Times New Roman, Calibri or Arial at a minimum of 11 pt; the current choices retain two opening authors and Consolas 10.5 pt code. After the content review, check the final layout, the 5,000-character limit for Part B and the four-page limit.
+
 ## Edit the inputs
 
 Everything you edit is in `input/`:
