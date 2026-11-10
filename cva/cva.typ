@@ -177,7 +177,7 @@
     software: tr("Software:", "Software:"),
   )
   [
-    #emph(types.at(entry.tipo)) #citation(entry, journal: true)
+    #emph(types.at(entry.tipo)) #citation(entry, journal: true).
     #if entry.doi != "" {
       hyperlink("https://doi.org/" + entry.doi, label: "doi: " + entry.doi)
     }
