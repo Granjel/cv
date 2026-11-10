@@ -179,7 +179,8 @@
   [
     #emph(types.at(entry.tipo)) #citation(entry, journal: true).
     #if entry.doi != "" {
-      hyperlink("https://doi.org/" + entry.doi, label: "doi: " + entry.doi)
+      // keep the complete DOI label together when it moves to the next line
+      box(hyperlink("https://doi.org/" + entry.doi, label: "doi: " + entry.doi))
     }
     #publication-context[
       #inline(entry.autoria) #inline(entry.contribucion)
