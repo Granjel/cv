@@ -9,7 +9,7 @@ The CVA uses one workbook for structured information and two Markdown files for 
 - [ ] **C.4 scope:** decide which activities demonstrate knowledge transfer. Present the systematic sharing of documented data and reproducible code in Part B as open science; assess any distinct software-transfer claim separately. Review the 2019 judicial expert assessment as an application of biological expertise. English C.4 currently contains the new open-science paragraph; Spanish still contains the older software paragraph.
 - [ ] **Outreach responsibilities:** confirm the scope and years of organising or co-organising the European Researchers' Night, including whether this covered the group contribution or the wider event. Update the current participation wording in Part B where appropriate.
 - [ ] **ChEMISt access value:** confirm with Lucille the documentation supporting the estimated EUR 85,000 value and distinguish awarded access and analytical services from cash funding.
-- [ ] **Mobility records:** add the French visit dates to the structured inputs so the statistics can use the documented total of 15 visits and 173 inclusive calendar days in 2023–2025. Verify exact MBG-CSIC and German stay durations if precise totals are needed; the current month ranges describe calendar coverage. Keep UNESP, Rio Claro as the main Brazilian host and UFSCar as a brief additional visit.
+- [ ] **Mobility records:** add the French visit dates to the structured inputs to document the total of 15 visits and 173 inclusive calendar days in 2023–2025. Verify exact MBG-CSIC and German stay durations if precise totals are needed; the current month ranges describe calendar coverage. Keep UNESP, Rio Claro as the main Brazilian host and UFSCar as a brief additional visit.
 - [ ] **Ongoing manuscripts:** confirm status and authorship for LUI, the Brazilian collaboration, the two US manuscripts and the postdoctoral papers. Distinguish completed publications from work in progress and avoid counting the same manuscript twice.
 - [ ] **Language consistency:** agree on the English content, then synchronise the Spanish text and bilingual spreadsheet notes, especially C.4.
 - [ ] **Submission format:** resolve the shortened author lists and code-font styling against the [2026 CVA guidelines](https://www.aei.gob.es/sites/default/files/convocatory_info/assistants/2026-09/4.CVA%202026%20guidelines.pdf). The instructions request the first three authors for lists longer than eight and Times New Roman, Calibri or Arial at a minimum of 11 pt; the current choices retain two opening authors and Consolas 10.5 pt code. After the content review, check the final layout, the 5,000-character limit for Part B and the four-page limit.
@@ -110,35 +110,3 @@ From the `cva/` directory, use `Rscript cva.R` or `source("cva.R", encoding = "U
 The build checks dates, translations, authorship, the Part B character limit, A4 size, the four-page and 4 MB limits, and the established font rules. Each numbered contribution stays on one page with its explanatory quote. An entry taller than the usable page area raises an error instead of being split or shrunk. Date fields and short ranges stay together, while locations can wrap normally. Both logos appear in their usual positions on every page in both languages.
 
 Compilation files are created in the operating system's temporary directory and removed after the build. Format R code with `air`.
-
-## Retrieve CVA statistics
-
-`cva/stats.R` reads the workbook, retrieves public metadata and saves everything in `input/stats.csv`. Its `record_type` column distinguishes publication–author–affiliation rows (`publication`) from activity evidence (`activity`). Fields that do not apply to a record are blank. The workbook and CVA PDFs are not modified.
-
-From the repository directory:
-
-```sh
-Rscript cva/stats.R --render
-```
-
-From Positron's R Console:
-
-```r
-source("cva/stats.R", encoding = "UTF-8")
-stats <- retrieve_stats()
-render_stats()
-```
-
-The Quarto source `cva/stats.qmd` reads only `input/stats.csv` and calculates the text, tables and offline map. The rendered page is `cva/stats.html`. Omit `--render` to update only the CSV; `render_stats()` alone rebuilds the report without downloading metadata. It selects the current R installation through a temporary `QUARTO_R` setting.
-
-The BioScience collective appeal is excluded by the explicit `exclude_dois` argument. `reference_country` defaults to Spain (`ES`), and `as_of` defaults to today's date in Europe/Madrid. Statistics use all career records, independently of CVA selection flags.
-
-Count unique `paper_id` values for publications and unique `activity_id` values for activities. Several institutions or countries can produce multiple rows for the same record. Collaboration measures exclude the applicant and use researcher and ROR identifiers. Research mobility uses appointments and research visits; project funding, awarded facility access, supervision partners and online participation retain separate roles. Declared months, covered calendar months and exact days remain separate, and aggregate visit records do not establish a precise trip count. Programme recognition uses the same documented catalogue for all records. Source rows, URLs and retrieval dates remain in the CSV.
-
-The report organises evidence for the [Juan de la Cierva 2026 criteria](https://www.aei.gob.es/sites/default/files/convocatory_info/assistants/2026-09/Convocatoria%20JDC%202026_firmada.pdf#page=41). It flags missing evidence and does not calculate an evaluation score. Affiliation data describe the published records, rather than verified current employment; institution geography may represent the main location. Project budgets and estimated access values are not personal funding totals.
-
-Public responses are cached in the ignored `cva/.stats-cache/` directory for seven days; negative lookups are retried after one day. Use `--refresh` or `retrieve_stats(refresh = TRUE)` to refresh, and `--offline` or `retrieve_stats(offline = TRUE)` to reproduce the CSV from cached responses. Failed retrieval retains the previous CSV. The cache, rendered HTML and Quarto resources are ignored by Git.
-
-Retrieval requires `readxl`, `jsonlite`, `httr2`, `digest`, `countrycode` and `commonmark`; rendering also needs Quarto, `knitr`, `rmarkdown`, `leaflet` and `maps`. A free `OPENALEX_API_KEY` environment variable can provide higher API limits.
-
-Sources: [OpenAlex](https://help.openalex.org/data/authorships/), [Crossref](https://www.crossref.org/documentation/retrieve-metadata/rest-api/) and [ROR](https://ror.readme.io/docs/api-affiliation). Programme classifications retain their official source links in the CSV.
