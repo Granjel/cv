@@ -143,6 +143,67 @@
   #set par(leading: prose-leading, justify: true)
   #body
 ]
+// preserve Markdown nesting and the gap after lists
+// use normal line spacing and keep an introductory paragraph with its list
+#let markdown-blocks(blocks, in-item: false, item-gap: prose-leading) = {
+  for (index, node) in blocks.enumerate() {
+    if in-item and index > 0 { parbreak() }
+    if node.type == "paragraph" {
+      if in-item {
+        markdown-inline(node.children)
+      } else {
+        let followed-by-list = index + 1 < blocks.len() and blocks.at(index + 1).type == "list"
+        prose(
+          below: if followed-by-list { prose-leading } else { narrative-paragraph-gap },
+          sticky: followed-by-list,
+        )[#markdown-inline(node.children)]
+      }
+    } else if node.type == "list" {
+      let body = {
+        set par(leading: prose-leading, spacing: narrative-paragraph-gap, justify: true)
+        let items = node.items.map(item => {
+          set par(
+            leading: prose-leading,
+            spacing: if node.tight { prose-leading } else { narrative-paragraph-gap },
+            justify: true,
+          )
+          markdown-blocks(
+            item,
+            in-item: true,
+            item-gap: if node.tight { prose-leading } else { narrative-paragraph-gap },
+          )
+        })
+        if node.ordered {
+          enum(
+            numbering: "1.",
+            start: node.start,
+            indent: 0pt,
+            body-indent: 0.6em,
+            tight: node.tight,
+            ..items,
+          )
+        } else {
+          list(
+            marker: [•],
+            indent: 0pt,
+            body-indent: 0.6em,
+            tight: node.tight,
+            ..items,
+          )
+        }
+      }
+      if in-item {
+        prose(
+          above: if index > 0 { item-gap } else { 0pt },
+          below: if index + 1 < blocks.len() { item-gap } else { 0pt },
+          body,
+        )
+      } else {
+        prose(below: narrative-paragraph-gap, body)
+      }
+    }
+  }
+}
 // measure each complete contribution at its actual list width
 // move it to the next page when needed and reject an oversized entry
 #let contribution(body) = block(width: 100%, breakable: false)[#layout(size => {
@@ -171,6 +232,7 @@
 #let publication(entry) = {
   let types = (
     articulo: tr("Artículo científico:", "Journal article:"),
+    preprint: "Preprint:",
     libro: tr("Libro:", "Book:"),
     capitulo: tr("Capítulo de libro:", "Book chapter:"),
     datos: tr("Datos:", "Dataset:"),
@@ -289,9 +351,7 @@
   )).flatten(),
 )
 #section(tr("Parte B. RESUMEN DEL CV", "Part B. CV SUMMARY"))
-#for paragraph in cv.resumen_parrafos {
-  prose(below: narrative-paragraph-gap)[#markdown-inline(paragraph)]
-}
+#markdown-blocks(cv.resumen_bloques)
 #section(tr("Parte C. MÉRITOS RELEVANTES", "Part C. RELEVANT MERITS"))
 #set par(leading: prose-leading, spacing: prose-leading, justify: true)
 #subsection(
@@ -347,6 +407,4 @@
   "C.4. Transferencia de conocimiento y tecnología",
   "C.4. Knowledge and technology transfer",
 ))
-#for paragraph in cv.transferencia_parrafos {
-  prose(below: narrative-paragraph-gap)[#markdown-inline(paragraph)]
-}
+#markdown-blocks(cv.transferencia_bloques)

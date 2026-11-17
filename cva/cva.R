@@ -570,7 +570,7 @@ cva_authors <- function(row) {
     cva_error(row$context, ": autor de correspondencia ausente de autores.")
   }
   indices <- sort(unique(c(
-    1:2,
+    1:3,
     position,
     match(corresponding, names),
     length(names)
@@ -890,6 +890,66 @@ cva_markdown_plain <- function(nodes) {
   )
 }
 
+# preserve paragraph and list structure without evaluating Markdown content
+cva_markdown_block <- function(block, context) {
+  type <- xml2::xml_name(block)
+  if (type == "paragraph") {
+    return(list(
+      type = type,
+      children = cva_markdown_inline(xml2::xml_children(block), context)
+    ))
+  }
+  if (type == "list") {
+    ordered <- identical(xml2::xml_attr(block, "type"), "ordered")
+    return(list(
+      type = type,
+      ordered = ordered,
+      start = if (ordered) as.integer(xml2::xml_attr(block, "start")) else 1L,
+      tight = identical(xml2::xml_attr(block, "tight"), "true"),
+      items = lapply(xml2::xml_children(block), function(item) {
+        lapply(xml2::xml_children(item), cva_markdown_block, context = context)
+      })
+    ))
+  }
+  cva_error(
+    context,
+    ": unsupported Markdown block '",
+    type,
+    "'; use paragraphs or lists with bold, italics, links or inline code."
+  )
+}
+
+# include visible list markers and item breaks in the character count
+cva_markdown_blocks_plain <- function(blocks) {
+  paste(
+    vapply(
+      blocks,
+      function(block) {
+        if (block$type == "paragraph") {
+          return(cva_markdown_plain(block$children))
+        }
+        paste(
+          vapply(
+            seq_along(block$items),
+            function(i) {
+              marker <- if (block$ordered) {
+                paste0(block$start + i - 1L, ". ")
+              } else {
+                "\u2022 "
+              }
+              paste0(marker, cva_markdown_blocks_plain(block$items[[i]]))
+            },
+            character(1)
+          ),
+          collapse = if (block$tight) "\n" else "\n\n"
+        )
+      },
+      character(1)
+    ),
+    collapse = "\n\n"
+  )
+}
+
 # parse explicit workbook emphasis with the same safe inline Markdown nodes
 # prefix the cell so leading punctuation cannot create a heading or list
 cva_workbook_formatting <- function(value) {
@@ -977,16 +1037,8 @@ cva_read_markdown <- function(filename) {
     if (is.null(current)) {
       cva_error(context, ": narrative text must follow '# Part B' or '# C.4'.")
     }
-    if (type != "paragraph") {
-      cva_error(
-        context,
-        ": unsupported Markdown block '",
-        type,
-        "'; use paragraphs with bold, italics, links or inline code."
-      )
-    }
     sections[[current]][[length(sections[[current]]) + 1L]] <-
-      cva_markdown_inline(xml2::xml_children(block), context)
+      cva_markdown_block(block, context)
   }
 
   # retain visible text for the character limit and document comparisons
@@ -994,17 +1046,10 @@ cva_read_markdown <- function(filename) {
   if (length(missing)) {
     cva_error(context, ": include both '# Part B' and '# C.4' headings.")
   }
-  result <- lapply(sections, function(paragraphs) {
+  result <- lapply(sections, function(blocks) {
     list(
-      text = paste(
-        vapply(
-          paragraphs,
-          cva_markdown_plain,
-          character(1)
-        ),
-        collapse = "\n\n"
-      ),
-      paragraphs = paragraphs
+      text = cva_markdown_blocks_plain(blocks),
+      blocks = blocks
     )
   })
   if (!nzchar(result$resumen$text)) {
@@ -1096,9 +1141,9 @@ cva_prepare_header <- function(tables, current, lang, render_date, root) {
     idioma = lang,
     perfil = profile,
     resumen = summary,
-    resumen_parrafos = narrative$resumen$paragraphs,
+    resumen_bloques = narrative$resumen$blocks,
     transferencia_narrativa = narrative$transferencia$text,
-    transferencia_parrafos = narrative$transferencia$paragraphs,
+    transferencia_bloques = narrative$transferencia$blocks,
     duracion_actual = cva_duration(
       current$inicio,
       as_of = profile$fecha_cva,
@@ -1132,7 +1177,6 @@ cva_prepare_experience <- function(row, lang, as_of) {
 
 # prepare A.3 degree, university/country and year cells
 cva_prepare_education <- function(row, lang) {
-  req <- function(key) cva_required(row, key)
   loc <- function(key, mandatory = FALSE) {
     cva_localized(row, key, lang, mandatory)
   }
@@ -1140,7 +1184,7 @@ cva_prepare_education <- function(row, lang) {
   entry <- list(
     titulo = loc("titulo", TRUE),
     universidad = paste(
-      req("universidad"),
+      cva_required(row, "universidad"),
       loc("pais", TRUE),
       sep = " / "
     ),
@@ -1168,7 +1212,10 @@ cva_prepare_publication <- function(row, lang, applicant_authors) {
     )
   }
   kind <- req("tipo")
-  if (!kind %in% c("articulo", "libro", "capitulo", "datos", "software")) {
+  if (
+    !kind %in%
+      c("articulo", "preprint", "libro", "capitulo", "datos", "software")
+  ) {
     cva_error(row$context, ": tipo de publicación desconocido.")
   }
   # assemble literal citation fields and preserve the established separators

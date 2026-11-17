@@ -12,7 +12,7 @@ The CVA uses one workbook for structured information and two Markdown files for 
 - [ ] **Mobility records:** add the French visit dates to the structured inputs to document the total of 15 visits and 173 inclusive calendar days in 2023–2025. Verify exact MBG-CSIC and German stay durations if precise totals are needed; the current month ranges describe calendar coverage. Keep UNESP, Rio Claro as the main Brazilian host and UFSCar as a brief additional visit.
 - [ ] **Ongoing manuscripts:** confirm status and authorship for LUI, the Brazilian collaboration, the two US manuscripts and the postdoctoral papers. Distinguish completed publications from work in progress and avoid counting the same manuscript twice.
 - [ ] **Language consistency:** agree on the English content, then synchronise the Spanish text and bilingual spreadsheet notes, especially C.4.
-- [ ] **Submission format:** resolve the shortened author lists and code-font styling against the [2026 CVA guidelines](https://www.aei.gob.es/sites/default/files/convocatory_info/assistants/2026-09/4.CVA%202026%20guidelines.pdf). The instructions request the first three authors for lists longer than eight and Times New Roman, Calibri or Arial at a minimum of 11 pt; the current choices retain two opening authors and Consolas 10.5 pt code. After the content review, check the final layout, the 5,000-character limit for Part B and the four-page limit.
+- [ ] **Submission format:** verify the final document against the [2026 CVA guidelines](https://www.aei.gob.es/sites/default/files/convocatory_info/assistants/2026-09/4.CVA%202026%20guidelines.pdf). Lists longer than eight authors now retain the first three authors. Check any code-font styling against the prescribed fonts and minimum size before submission; declared code fragments currently use Consolas 10.5 pt. After the content review, check the final layout, the 5,000-character limit for Part B and the four-page limit.
 
 ## Edit the inputs
 
@@ -44,17 +44,21 @@ In `Experiencia`, use `actualmente` in `fin` for the current appointment. Its po
 
 `url_es` / `url_en` in `Experiencia` hold the department links for each language. Only the exact institution name is hyperlinked in A.1 and A.2, without changing its appearance. A blank URL leaves that name unlinked. Education institutions remain unlinked.
 
+Use each institution's official original-language name throughout both CVAs and the Markdown narratives. Appointments, education and conferences share the name stored in `institucion` (`Experiencia`), `universidad` (`Formacion`) and `congreso_institucion` (`Congresos`). Established acronyms can remain unchanged.
+
 Dates accept Excel dates or text in `YYYY`, `YYYY-MM` or `YYYY-MM-DD` format. Keep the precision you know. `Formacion` has one `fecha` column for each degree's completion date.
 
-Author lists use `Surname, Given names; Surname, Given names`. `posicion_autor` gives your position; `correspondencia` names the corresponding authors exactly as in the list. Lists of up to eight authors are shown in full. Longer lists retain the first two authors, you, all corresponding authors and the final author, in their original order without duplicates; ellipses mark omitted gaps. The total and your position always come from the complete list, regardless of the displayed abbreviation.
+Author lists use `Surname, Given names; Surname, Given names`. `posicion_autor` gives your position; `correspondencia` names the corresponding authors exactly as in the list. Lists of up to eight authors are shown in full. Longer lists retain the first three authors, you, all corresponding authors and the final author, in their original order without duplicates; ellipses mark omitted gaps. The total and your position always come from the complete list, regardless of the displayed abbreviation.
+
+In `Publicaciones`, use `preprint` in `tipo` to display an entry as “Preprint” in both languages; it follows the same citation and contribution rules as the other publication types.
 
 Publication quotes are in `contribucion_es` and `contribucion_en`. The same two columns in `Proyectos` contain the complete project contribution, including any participation duration you want to mention.
 
-In `Proyectos`, keep `acronimo` separate from the title. Titles use the stored wording, prefixed by the acronym when present. `financiador` / `funding` and `convocatoria` / `call` hold the Spanish and English funding body and call. `ip` lists the principal investigators, separated by semicolons. `institucion` / `institution` hold the Spanish and English institution names. Each institution follows the investigator names as `PI: name, at institution` in English or `IP: nombre, en institución` in Spanish; multiple investigators use `Co-PIs` or `Co-IP`.
+In `Proyectos`, keep `acronimo` separate from the title. Titles use the stored wording, prefixed by the acronym when present. `financiador` / `funding` and `convocatoria` / `call` hold the Spanish and English funding body and call. `ip` lists the principal investigators, separated by semicolons. `institucion` / `institution` retain the same original-language institution names, with surrounding country or group descriptions in Spanish and English. Each institution follows the investigator names as `PI: name, at institution` in English or `IP: nombre, en institución` in Spanish; multiple investigators use `Co-PIs` or `Co-IP`.
 
 Both languages use the same metadata order: reference, call and funder, investigators and institution; period. The amount and any award description follow, with the status last. Project year ranges use an en dash without spaces, for example `2023–2027`. `tipo_importe` distinguishes `total` funding from an `estimado` value; keep the original currency in `moneda`. Estimated values receive a neutral label rather than an inferred claim about services. Use optional `detalle_importe_es` / `detalle_importe_en` for the complete award description, including any facilities or services; this text is printed directly without generating a separate facilities list or label. `estado` / `status` hold the Spanish and English status. Leave both language cells blank to omit an optional description or status.
 
-In `Congresos`, `congreso_institucion` names the event or host institution. Presentations display their authors; organisational roles such as scientific committees do not. `modalidad_es` / `modalidad_en` supply the displayed contribution type literally, including the full wording you want for posters or talks.
+In `Congresos`, `congreso_institucion` names the event or host institution for both languages. Presentations display their authors; organisational roles such as scientific committees do not. `modalidad_es` / `modalidad_en` supply the displayed contribution type literally, including the full wording you want for posters or talks.
 
 In displayed workbook text, use `*text*` for italics and `**text**` for bold. For example, enter `*Arabidopsis thaliana*` to italicise a scientific name. Surround each code fragment with single backticks. Any number of fragments can appear in one cell. They use Consolas 10.5 pt, as does Markdown inline code; backticks are removed and quotation marks appear only when you type them. Ordinals use consistent superscript styling throughout the CVA, outside code fragments.
 
@@ -71,14 +75,17 @@ Keep the two section headings in each Markdown file:
 
 Another paragraph, with *italics* or a [link](https://example.org).
 
+- A list item, with **bold** or *italics* if needed.
+- Another item.
+
 # C.4
 
 Write the knowledge-transfer section here.
 ```
 
-Each paragraph occupies one physical line. Put a blank line between paragraphs; use your editor's visual word wrapping for comfortable reading.
+Each paragraph occupies one physical line. Put a blank line between paragraphs; use your editor's visual word wrapping for comfortable reading. Use `- ` for bullet items or `1. ` for numbered items in either section. Each item starts on its own line; indent nested lists beneath their parent item. Blank lines between items create a more widely spaced list.
 
-Bold, italics, links and inline code are rendered from Markdown. The section headings select the destination and are not printed. Part B is limited to 5,000 visible characters per language, including spaces and paragraph breaks; Markdown markers and link destinations are excluded from that count.
+Bold, italics, links and inline code are rendered from Markdown. The section headings select the destination and are not printed. Part B is limited to 5,000 visible characters per language, including spaces, displayed list markers and paragraph breaks; inline formatting markers and link destinations are excluded from that count.
 
 ## Render the CVA
 
