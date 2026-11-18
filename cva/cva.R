@@ -145,8 +145,8 @@ cva_schema <- list(
       "ip",
       "institucion",
       "institution",
-      "importe",
-      "moneda",
+      "importe_eur",
+      "importe_usd",
       "tipo_importe",
       "estado",
       "status",
@@ -320,24 +320,38 @@ cva_number <- function(x, context, integer = FALSE) {
   n
 }
 
-# format an award using the language's separators and its original currency
-cva_amount <- function(row, lang, digits = 2L, symbols = FALSE) {
-  n <- cva_number(row$importe, paste0(row$context, ": importe"))
-  amount <- formatC(
-    n,
-    format = "f",
-    digits = digits,
-    big.mark = if (lang == "es") "." else ",",
-    decimal.mark = if (lang == "es") "," else "."
-  )
-  currency <- cva_required(row, "moneda")
-  if (symbols && currency == "EUR") {
-    return(if (lang == "en") paste0("€", amount) else paste(amount, "€"))
+# format available project amounts and mark euro conversions as approximate
+cva_amount <- function(row, lang) {
+  format_currency <- function(key, currency) {
+    value <- cva_text(row[[key]])
+    if (!nzchar(value)) {
+      return("")
+    }
+    number <- cva_number(value, paste0(row$context, ": ", key))
+    amount <- formatC(
+      number,
+      format = "f",
+      digits = if (number == floor(number)) 0L else 2L,
+      big.mark = if (lang == "es") "." else ",",
+      decimal.mark = if (lang == "es") "," else "."
+    )
+    if (currency == "USD") {
+      return(paste0("US$", amount))
+    }
+    if (lang == "es") paste(amount, "€") else paste0("€", amount)
   }
-  if (symbols && currency == "USD") {
-    return(paste0("US$", amount))
+  euro <- format_currency("importe_eur", "EUR")
+  dollar <- format_currency("importe_usd", "USD")
+  if (!nzchar(euro) && !nzchar(dollar)) {
+    cva_error(row$context, ": completa importe_eur o importe_usd.")
   }
-  paste(amount, currency)
+  if (!nzchar(dollar)) {
+    return(euro)
+  }
+  if (!nzchar(euro)) {
+    return(dollar)
+  }
+  paste0(dollar, " (≈", euro, ")")
 }
 
 # join non-empty fields without duplicating sentence-ending punctuation
@@ -1387,13 +1401,7 @@ cva_prepare_project <- function(row, lang, applicant_authors) {
   if (!amount_type %in% c("total", "estimado")) {
     cva_error(row$context, ": tipo_importe debe ser total o estimado.")
   }
-  amount <- cva_number(row$importe, paste0(row$context, ": importe"))
-  value <- cva_amount(
-    row,
-    lang,
-    digits = if (amount == floor(amount)) 0L else 2L,
-    symbols = TRUE
-  )
+  value <- cva_amount(row, lang)
   # describe the numeric award neutrally and print only explicit extra details
   award <- paste0(
     if (amount_type == "estimado") {

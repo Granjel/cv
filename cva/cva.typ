@@ -291,10 +291,10 @@
     align: left + horizon,
     strong(tr("Parte A. DATOS PERSONALES", "Part A. PERSONAL INFORMATION")),
     grid-table((26mm, 43mm), label(strong(tr("Fecha CVA", "CVA date"))), table.cell(
-      align: center + horizon,
+      align: left + horizon,
     )[#display-date(
       p.fecha_cva,
-    )]),
+    ) (d/m/y)]),
   )
 ]
 #grid-table(
