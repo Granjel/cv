@@ -239,7 +239,7 @@
     software: tr("Software:", "Software:"),
   )
   [
-    #emph(types.at(entry.tipo)) #citation(entry, journal: true).
+    #if entry.tipo != "preprint" { emph(types.at(entry.tipo)); [ ] }#citation(entry, journal: true).
     #if entry.doi != "" {
       // keep the complete DOI label together when it moves to the next line
       box(hyperlink("https://doi.org/" + entry.doi, label: "doi: " + entry.doi))
@@ -248,6 +248,40 @@
       #inline(entry.autoria) #inline(entry.contribucion)
     ]
   ]
+}
+
+// render unnumbered groups with continuous contribution numbering
+#let grouped-contributions(entries, groups, category, render-entry) = context {
+  // reserve the same number column across every group
+  let marker-width(numbers) = numbers.fold(
+    0pt,
+    (width, number) => calc.max(width, measure(numbering("1.", number)).width),
+  )
+  let shared-width = marker-width(range(1, entries.len() + 1))
+  let next-number = 1
+  for (group, heading) in groups {
+    let selected = entries.filter(entry => category(entry) == group)
+    if selected.len() > 0 {
+      block(
+        above: if next-number == 1 { 0pt } else { subsection-heading-gap },
+        below: prose-leading,
+        sticky: true,
+      )[#emph(heading)]
+      let local-width = marker-width(
+        range(next-number, next-number + selected.len()),
+      )
+      enum(
+        numbering: "1.",
+        start: next-number,
+        indent: shared-width - local-width,
+        body-indent: 19pt,
+        tight: false,
+        spacing: entry-gap,
+        ..selected.map(entry => contribution(render-entry(entry))),
+      )
+      next-number += selected.len()
+    }
+  }
 }
 
 #v(3mm)
@@ -361,17 +395,16 @@
   ),
   above: 0pt,
 )
-#if cv.publicaciones_detalle.len() > 0 {
-  set par(justify: true)
-  enum(
-    numbering: "1.",
-    indent: 0pt,
-    body-indent: 19pt,
-    tight: false,
-    spacing: entry-gap,
-    ..cv.publicaciones_detalle.map(entry => contribution[#publication(entry)]),
-  )
-}
+// separate preprints using the publication type stored in the workbook
+#grouped-contributions(
+  cv.publicaciones_detalle,
+  (
+    ("published", tr("Publicadas:", "Published:")),
+    ("preprint", "Preprints:"),
+  ),
+  entry => if entry.tipo == "preprint" { "preprint" } else { "published" },
+  entry => publication(entry),
+)
 #subsection(tr("C.2. Congresos", "C.2. Conferences"))
 #if cv.congresos_detalle.len() > 0 {
   set par(justify: true)
@@ -390,19 +423,19 @@
   "C.3. Proyectos de investigación",
   "C.3. Research projects",
 ))
-#if cv.proyectos_detalle.len() > 0 {
-  enum(
-    numbering: "1.",
-    indent: 0pt,
-    body-indent: 19pt,
-    tight: false,
-    spacing: entry-gap,
-    ..cv.proyectos_detalle.map(entry => contribution[
-      #inline(entry.titulo) #citation(entry)
-      #publication-context[#inline(entry.papel)]
-    ]),
-  )
-}
+// group projects by the PI names in the workbook
+#grouped-contributions(
+  cv.proyectos_detalle,
+  (
+    ("pi", tr("Como IP:", "As PI:")),
+    ("equipo", tr("Como miembro del equipo:", "As team member:")),
+  ),
+  entry => entry.grupo,
+  entry => [
+    #inline(entry.titulo) #citation(entry)
+    #publication-context[#inline(entry.papel)]
+  ],
+)
 #subsection(tr(
   "C.4. Transferencia de conocimiento y tecnología",
   "C.4. Knowledge and technology transfer",

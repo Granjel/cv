@@ -623,7 +623,7 @@ cva_publication_role <- function(
   }
 }
 
-# compare author aliases independently of case, spaces and punctuation
+# compare author aliases independently of case, spaces, commas and periods
 cva_author_key <- function(value) tolower(gsub("[[:space:],.]+", "", value))
 
 # separate literal citation text from the styles applied later by Typst
@@ -1331,7 +1331,7 @@ cva_prepare_conference <- function(row, lang, applicant_authors) {
 }
 
 # prepare project titles, bilingual metadata and contribution quotes
-cva_prepare_project <- function(row, lang) {
+cva_prepare_project <- function(row, lang, applicant_authors) {
   req <- function(key) cva_required(row, key)
   loc <- function(key) cva_localized(row, key, lang, TRUE)
   es <- lang == "es"
@@ -1415,7 +1415,12 @@ cva_prepare_project <- function(row, lang) {
       cva_localized(row, "estado", lang)
     )
   )
+  # group PI and co-PI projects by the applicant aliases stored in Perfil
+  is_pi <- any(
+    cva_author_key(investigators) %in% cva_author_key(applicant_authors)
+  )
   list(
+    grupo = if (is_pi) "pi" else "equipo",
     titulo = paste0(title, "."),
     detalles = paste0(sub("[.]$", "", cva_citation_text(segments)), "."),
     segmentos = segments,
@@ -1467,7 +1472,9 @@ cva_prepare <- function(
         name,
         Publicaciones = cva_prepare_publication(row, lang, applicant_authors),
         Congresos = cva_prepare_conference(row, lang, applicant_authors),
-        Proyectos = list(detail = cva_prepare_project(row, lang))
+        Proyectos = list(
+          detail = cva_prepare_project(row, lang, applicant_authors)
+        )
       )
       details[[length(details) + 1L]] <- prepared$detail
     }
