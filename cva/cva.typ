@@ -33,6 +33,7 @@
 #let subsection-heading-gap = 7pt
 #let prose-leading = 0.6em
 #let entry-gap = prose-leading
+#let entry-body-indent = 10pt
 #let narrative-paragraph-gap = 11pt
 #let section(body, above: 18pt) = block(above: above, below: part-heading-gap, sticky: true)[#strong(body)]
 #let subsection(body, above: 12pt) = block(above: above, below: subsection-heading-gap, sticky: true)[#strong(body)]
@@ -140,7 +141,7 @@
   sticky: sticky,
   breakable: breakable,
 )[
-  #set par(leading: prose-leading, justify: true)
+  #set par(leading: prose-leading)
   #body
 ]
 // preserve Markdown nesting and the gap after lists
@@ -160,12 +161,11 @@
       }
     } else if node.type == "list" {
       let body = {
-        set par(leading: prose-leading, spacing: narrative-paragraph-gap, justify: true)
+        set par(leading: prose-leading, spacing: narrative-paragraph-gap)
         let items = node.items.map(item => {
           set par(
             leading: prose-leading,
             spacing: if node.tight { prose-leading } else { narrative-paragraph-gap },
-            justify: true,
           )
           markdown-blocks(
             item,
@@ -274,7 +274,7 @@
         numbering: "1.",
         start: next-number,
         indent: shared-width - local-width,
-        body-indent: 19pt,
+        body-indent: entry-body-indent,
         tight: false,
         spacing: entry-gap,
         ..selected.map(entry => contribution(render-entry(entry))),
@@ -386,8 +386,9 @@
 )
 #section(tr("Parte B. RESUMEN DEL CV", "Part B. CV SUMMARY"))
 #markdown-blocks(cv.resumen_bloques)
+#set par(justify: false)
 #section(tr("Parte C. MÉRITOS RELEVANTES", "Part C. RELEVANT MERITS"))
-#set par(leading: prose-leading, spacing: prose-leading, justify: true)
+#set par(leading: prose-leading, spacing: prose-leading)
 #subsection(
   tr(
     "C.1. Publicaciones",
@@ -407,11 +408,10 @@
 )
 #subsection(tr("C.2. Congresos", "C.2. Conferences"))
 #if cv.congresos_detalle.len() > 0 {
-  set par(justify: true)
   enum(
     numbering: "1.",
     indent: 0pt,
-    body-indent: 19pt,
+    body-indent: entry-body-indent,
     tight: false,
     spacing: entry-gap,
     ..cv.congresos_detalle.map(entry => contribution[
